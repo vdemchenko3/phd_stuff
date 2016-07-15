@@ -6,6 +6,9 @@ import sys
 sys.path.append('/Users/Vasiliy/Desktop/PhD/Scripts/ZOBOV')
 from read_vol_zone_void import *
 from scipy import spatial
+from periodic_kdtree import PeriodicCKDTree
+import time
+
 
 
 font = {'family' : 'serif', 'serif' : ['Times'], 'size' : '35'}
@@ -16,6 +19,7 @@ matplotlib.rcParams['mathtext.rm'] = 'Times'
 matplotlib.rcParams['mathtext.it'] = 'Times'
 plt.rc('legend', **{'fontsize':30})
 
+t_begin = time.time()
 
 numpart, numzones, zone = read_zone('L1000.zone')
 numpart_vol, vol = read_vol('L1000.vol.txt', 1000)
@@ -23,6 +27,23 @@ x,y,z = read_AllHalo('AllHalo_1000Mpc_a1.0_M12.8.txt')
 ID, x_vol, y_vol, z_vol, x_denmin, y_denmin, z_denmin, zone_rad, dencon = read_vol_zone_txt('vol.zone.txt')
 
 Lbox = 1000
+
+def percent_diff(x,y):
+	# Both values mean the same kind of thing (one value is not obviously older or better than the other
+	percent_diff = abs((x-y)/((x+y)/2.))*100.
+	return percent_diff
+
+def percent_err(exact,est):
+	# The difference between Approximate and Exact Values, as a percentage of the Exact Value.
+
+	percent_err = abs((est-exact)/exact)*100.
+	return percent_err
+
+def percent_change(new,old):
+	# Percentage of old value to new value 
+
+	percent_change = ((new-old)/abs(old))*100.
+	return percent_change
 
 def coord_rot(coord,val,Lbox):
 	# Rotate box to put a particular coordinate in the middle
@@ -50,13 +71,13 @@ def spherical_stk(zone_rad_stk,x_zone_stk,y_zone_stk,z_zone_stk,numzone_stk):
 		ind_y_stk = find_nearest(y,y_zone_stk[r])
 		ind_z_stk = find_nearest(z,z_zone_stk[r])
 
-		# Rotate coordinates to make halo representing min den of zone in the center of the box
-		x_rot = coord_rot(x,x[ind_x_stk],Lbox)
-		y_rot = coord_rot(y,y[ind_y_stk],Lbox)
-		z_rot = coord_rot(z,z[ind_z_stk],Lbox)
+		# # Rotate coordinates to make halo representing min den of zone in the center of the box
+		# x_rot = coord_rot(x,x[ind_x_stk],Lbox)
+		# y_rot = coord_rot(y,y[ind_y_stk],Lbox)
+		# z_rot = coord_rot(z,z[ind_z_stk],Lbox)
 
-		halos_rot = zip(x_rot.ravel(), y_rot.ravel(), z_rot.ravel()) #makes x,y,z single arrays
-		tree_rot = spatial.cKDTree(halos_rot)
+		# halos_rot = zip(x_rot.ravel(), y_rot.ravel(), z_rot.ravel()) #makes x,y,z single arrays
+		# tree_rot = spatial.cKDTree(halos_rot)
 
 
 		count_stk = []
@@ -65,11 +86,11 @@ def spherical_stk(zone_rad_stk,x_zone_stk,y_zone_stk,z_zone_stk,numzone_stk):
 			# This gives me a number density in each shell
 			# looks for number of particles within a volume given by input radius
 			if n==0:
-				count_temp1 = len(tree_rot.query_ball_point([x_rot[ind_x_stk], y_rot[ind_y_stk], z_rot[ind_z_stk]], R_stk[n]*zone_rad_stk[r]))
+				count_temp1 = len(periodic_tree.query_ball_point([x[ind_x_stk], y[ind_y_stk], z[ind_z_stk]], R_stk[n]*zone_rad_stk[r]))
 				nden_temp1 = count_temp1/V[n]
 			else:
-				count_temp11 = len(tree_rot.query_ball_point([x_rot[ind_x_stk], y_rot[ind_y_stk], z_rot[ind_z_stk]], R_stk[n]*zone_rad_stk[r]))
-				count_temp12 = len(tree_rot.query_ball_point([x_rot[ind_x_stk], y_rot[ind_y_stk], z_rot[ind_z_stk]], R_stk[n-1]*zone_rad_stk[r]))
+				count_temp11 = len(periodic_tree.query_ball_point([x[ind_x_stk], y[ind_y_stk], z[ind_z_stk]], R_stk[n]*zone_rad_stk[r]))
+				count_temp12 = len(periodic_tree.query_ball_point([x[ind_x_stk], y[ind_y_stk], z[ind_z_stk]], R_stk[n-1]*zone_rad_stk[r]))
 				count_temp1 = count_temp11-count_temp12
 		 		nden_temp1 = count_temp1/(V[n]-V[n-1])
 
@@ -186,8 +207,10 @@ for i in slice_zone_idx:
 denminrad = np.int(find_nearest(x_slice_zone, x_denmin[np.int(zone[arb_ind])]))
 ### CREATE TREE FOR X,Y,Z COORDINATES FOR ALL HALOS #########################
 
+# Create tree with period boundary conditions
 halos = zip(x.ravel(), y.ravel(), z.ravel()) #makes x,y,z single arrays
-tree = spatial.cKDTree(halos)
+bounds = np.array([Lbox,Lbox,Lbox])
+periodic_tree = PeriodicCKDTree(bounds, halos)
 
 #############################################################################
 
@@ -209,18 +232,18 @@ nden = []
 
 for i in R_shell:
 	# Find number of halos in each concetric sphere of radius given by array R
-	count_void.append(len(tree.query_ball_point([x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]], i)))
+	count_void.append(len(periodic_tree.query_ball_point([x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]], i)))
 
 for i in range(0,len(R_shell)):
 
 	# This gives me a number density in each shell
 	# looks for number of particles within a volume given by input radius
 	if i==0:
-		count_temp = len(tree.query_ball_point([x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]], R_shell[i]))
+		count_temp = len(periodic_tree.query_ball_point([x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]], R_shell[i]))
 		nden_temp = count_temp/V_shell[i]
 	else:		
-		count_temp1 = len(tree.query_ball_point([x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]], R_shell[i]))
-		count_temp2 = len(tree.query_ball_point([x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]], R_shell[i-1]))
+		count_temp1 = len(periodic_tree.query_ball_point([x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]], R_shell[i]))
+		count_temp2 = len(periodic_tree.query_ball_point([x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]], R_shell[i-1]))
 		count_temp = count_temp1-count_temp2
  		nden_temp = count_temp/(V_shell[i]-V_shell[i-1])
 
@@ -313,24 +336,25 @@ print 'number of medium zones', numzone_stk_md
 print 'number of large zones', numzone_stk_lg
 print ''
 
+
+### XYZ of den min center
 avg_count_sm, avg_nden_sm, R_stk = spherical_stk(zone_rad_stk_sm, x_zone_stk_sm, y_zone_stk_sm, z_zone_stk_sm, numzone_stk_sm)
 avg_count_md, avg_nden_md, R_stk = spherical_stk(zone_rad_stk_md,x_zone_stk_md,y_zone_stk_md,z_zone_stk_md,numzone_stk_md)
 avg_count_lg, avg_nden_lg, R_stk = spherical_stk(zone_rad_stk_lg,x_zone_stk_lg,y_zone_stk_lg,z_zone_stk_lg,numzone_stk_lg)
 
+# Save files
+np.save('sm_bin_count_nden', (avg_count_sm, avg_nden_sm))
+np.save('md_bin_count_nden', (avg_count_md, avg_nden_md))
+np.save('lg_bin_count_nden', (avg_count_lg, avg_nden_lg))
+
+### XYZ of vol avg center
 avg_count_sm_vol, avg_nden_sm_vol, R_stk = spherical_stk(zone_rad_stk_sm, x_vol_zone_stk_sm, y_vol_zone_stk_sm, z_vol_zone_stk_sm, numzone_stk_sm)
 avg_count_md_vol, avg_nden_md_vol, R_stk = spherical_stk(zone_rad_stk_md, x_vol_zone_stk_md, y_vol_zone_stk_md, z_vol_zone_stk_md, numzone_stk_md)
 avg_count_lg_vol, avg_nden_lg_vol, R_stk = spherical_stk(zone_rad_stk_lg, x_vol_zone_stk_lg, y_vol_zone_stk_lg, z_vol_zone_stk_lg, numzone_stk_lg)
 
-
-# Save files
-
-np.save(sm_bin_count_nden, (avg_count_sm, avg_nden_sm))
-np.save(md_bin_count_nden, (avg_count_md, avg_nden_md))
-np.save(lg_bin_count_nden, (avg_count_lg, avg_nden_lg))
-
-np.save(sm_bin_count_nden_vol, (avg_count_sm_vol, avg_nden_sm_vol))
-np.save(md_bin_count_nden_vol, (avg_count_md_vol, avg_nden_md_vol))
-np.save(lg_bin_count_nden_vol, (avg_count_lg_vol, avg_nden_lg_vol))
+np.save('sm_bin_count_nden_vol', (avg_count_sm_vol, avg_nden_sm_vol))
+np.save('md_bin_count_nden_vol', (avg_count_md_vol, avg_nden_md_vol))
+np.save('lg_bin_count_nden_vol', (avg_count_lg_vol, avg_nden_lg_vol))
 
 
 ### PRINT STATEMENTS ##############################################################################
@@ -352,7 +376,8 @@ print 'zone radius from adding cell volumes', r_eff_zone_tot
 print 'max zone radius', max(zone_rad)
 print ''
 
-
+t_end = time.time()
+print 'time of code: \t%g minutes' % ((t_end-t_begin)/60.)
 
 ###################################################################################################
 
@@ -430,7 +455,7 @@ for tick in ax3.xaxis.get_major_ticks():
 for tick in ax3.yaxis.get_major_ticks():
     tick.label.set_fontsize(27)
 ax3.legend(label, loc='best', fancybox = True, shadow = True)
-fig3.savefig('L1000_tot_zone_spherical_prof_multi_bin', format='pdf')
+# fig3.savefig('L1000_tot_zone_spherical_prof_multi_bin', format='pdf')
 
 
 # Create density contrast vs R_v for stacked voids with vol avg center
@@ -452,6 +477,7 @@ for tick in ax4.xaxis.get_major_ticks():
 for tick in ax4.yaxis.get_major_ticks():
     tick.label.set_fontsize(27)
 ax4.legend(label, loc='best', fancybox = True, shadow = True)
-fig4.savefig('L1000_tot_zone_spherical_prof_multi_bin_vol_center', format='pdf')
+# fig4.savefig('L1000_tot_zone_spherical_prof_multi_bin_vol_center', format='pdf')
+
 
 plt.show()
