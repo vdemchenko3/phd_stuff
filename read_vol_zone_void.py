@@ -2,6 +2,7 @@ import numpy as np
 from numpy import *
 import matplotlib
 from matplotlib import pyplot as plt
+from collections import defaultdict
 
 
 font = {'family' : 'serif', 'serif' : ['Times'], 'size' : '35'}
@@ -163,6 +164,48 @@ def read_AllHalo(filename):
 
 	return x,y,z
 
+def read_adj(filename):
+	# Read adjacency file and sort by placing each halo with it's adjacent halos
+	# Note that this file is sorted such that if a halo number is adjacent to a halo with a smaller number than it,
+	# e.g. if 5 and 13 are adjacent, then '5' wont show up in '13' because it was already accounted for in '5'
+
+	f = open(filename,'r') 
+
+	# Create dictionary for each halo to contain it's adjacent halos
+	d = defaultdict(list)
+
+	rows = f.readlines()
+
+	for i,row in enumerate(rows):
+		if i%2 == 0:
+			halo = np.int(row.split()[0]) # Get which halo adjacencies are for
+
+			adj_halos = []
+			adj_halos_temp = rows[i+1]
+
+			# Split and loop over each value in adjacent halos to create a list with their values
+			split_halos = adj_halos_temp.split()
+			for x in split_halos:
+				if x != '#':
+					adj_halos.append(np.int(x))
+				d[halo] = adj_halos # Add all adjacent halos to current halo
+	
+	# particle = (len(rows)/2)-1
+	# last_adj = [key for key in d.keys() if particle -1 in d[key]] #returns array of keys which contains a certain value ie 'particle'
+	
+	# Loop over dictionary and add adjacencies that are below the current halo
+	for v in range(0,len(rows)/2):
+		
+		# Array of adjacent values for particle 'v'
+		arr = d[v]
+
+		for part in arr:
+			if part > v:
+				d[part].extend([v])
+				
+	return d
+
+
 def find_nearest(array,value):
 	#returns index of value closest to input value in given array
 	idx = (np.abs(array-value)).argmin()
@@ -179,6 +222,8 @@ def second_largest(numbers):
             else:
                 m2 = x
     return m2 if count >= 2 else None
+
+
 
 
 

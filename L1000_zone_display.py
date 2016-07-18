@@ -25,6 +25,8 @@ numpart, numzones, zone = read_zone('L1000.zone')
 numpart_vol, vol = read_vol('L1000.vol.txt', 1000)
 x,y,z = read_AllHalo('AllHalo_1000Mpc_a1.0_M12.8.txt')
 ID, x_vol, y_vol, z_vol, x_denmin, y_denmin, z_denmin, zone_rad, dencon = read_vol_zone_txt('vol.zone.txt')
+adj_dict = read_adj('adj.txt')
+
 
 Lbox = 1000
 
@@ -338,23 +340,31 @@ print ''
 
 
 ### XYZ of den min center
-avg_count_sm, avg_nden_sm, R_stk = spherical_stk(zone_rad_stk_sm, x_zone_stk_sm, y_zone_stk_sm, z_zone_stk_sm, numzone_stk_sm)
-avg_count_md, avg_nden_md, R_stk = spherical_stk(zone_rad_stk_md,x_zone_stk_md,y_zone_stk_md,z_zone_stk_md,numzone_stk_md)
-avg_count_lg, avg_nden_lg, R_stk = spherical_stk(zone_rad_stk_lg,x_zone_stk_lg,y_zone_stk_lg,z_zone_stk_lg,numzone_stk_lg)
+# avg_count_sm, avg_nden_sm, R_stk = spherical_stk(zone_rad_stk_sm, x_zone_stk_sm, y_zone_stk_sm, z_zone_stk_sm, numzone_stk_sm)
+# avg_count_md, avg_nden_md, R_stk = spherical_stk(zone_rad_stk_md,x_zone_stk_md,y_zone_stk_md,z_zone_stk_md,numzone_stk_md)
+# avg_count_lg, avg_nden_lg, R_stk = spherical_stk(zone_rad_stk_lg,x_zone_stk_lg,y_zone_stk_lg,z_zone_stk_lg,numzone_stk_lg)
 
-# Save files
-np.save('sm_bin_count_nden', (avg_count_sm, avg_nden_sm))
-np.save('md_bin_count_nden', (avg_count_md, avg_nden_md))
-np.save('lg_bin_count_nden', (avg_count_lg, avg_nden_lg))
+# # Save files
+# np.save('sm_bin_count_nden', (avg_count_sm, avg_nden_sm))
+# np.save('md_bin_count_nden', (avg_count_md, avg_nden_md))
+# np.save('lg_bin_count_nden', (avg_count_lg, avg_nden_lg))
 
-### XYZ of vol avg center
-avg_count_sm_vol, avg_nden_sm_vol, R_stk = spherical_stk(zone_rad_stk_sm, x_vol_zone_stk_sm, y_vol_zone_stk_sm, z_vol_zone_stk_sm, numzone_stk_sm)
-avg_count_md_vol, avg_nden_md_vol, R_stk = spherical_stk(zone_rad_stk_md, x_vol_zone_stk_md, y_vol_zone_stk_md, z_vol_zone_stk_md, numzone_stk_md)
-avg_count_lg_vol, avg_nden_lg_vol, R_stk = spherical_stk(zone_rad_stk_lg, x_vol_zone_stk_lg, y_vol_zone_stk_lg, z_vol_zone_stk_lg, numzone_stk_lg)
+# ### XYZ of vol avg center
+# avg_count_sm_vol, avg_nden_sm_vol, R_stk = spherical_stk(zone_rad_stk_sm, x_vol_zone_stk_sm, y_vol_zone_stk_sm, z_vol_zone_stk_sm, numzone_stk_sm)
+# avg_count_md_vol, avg_nden_md_vol, R_stk = spherical_stk(zone_rad_stk_md, x_vol_zone_stk_md, y_vol_zone_stk_md, z_vol_zone_stk_md, numzone_stk_md)
+# avg_count_lg_vol, avg_nden_lg_vol, R_stk = spherical_stk(zone_rad_stk_lg, x_vol_zone_stk_lg, y_vol_zone_stk_lg, z_vol_zone_stk_lg, numzone_stk_lg)
 
-np.save('sm_bin_count_nden_vol', (avg_count_sm_vol, avg_nden_sm_vol))
-np.save('md_bin_count_nden_vol', (avg_count_md_vol, avg_nden_md_vol))
-np.save('lg_bin_count_nden_vol', (avg_count_lg_vol, avg_nden_lg_vol))
+# np.save('sm_bin_count_nden_vol', (avg_count_sm_vol, avg_nden_sm_vol))
+# np.save('md_bin_count_nden_vol', (avg_count_md_vol, avg_nden_md_vol))
+# np.save('lg_bin_count_nden_vol', (avg_count_lg_vol, avg_nden_lg_vol))
+
+
+##################################################################################################################################################
+
+#### GET ADJACENCIES FOR EACH HALO ####
+
+
+
 
 
 ### PRINT STATEMENTS ##############################################################################
@@ -437,47 +447,47 @@ for tick in ax1.yaxis.get_major_ticks():
 
 
 # Create density contrast vs R_v for stacked voids
-label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
-ax3 = fig3.add_subplot(111)
-#ax3.set_xlim(0,33)
-ax3.set_ylim(0,2)
-ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
-ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
-ax3.plot(R_stk, (np.array(avg_nden_sm)/tot_numden), linewidth=3)
-ax3.plot(R_stk, (np.array(avg_nden_md)/tot_numden), linewidth=3, linestyle='--')
-ax3.plot(R_stk, (np.array(avg_nden_lg)/tot_numden), linewidth=3, linestyle='-.')
-ax3.spines['top'].set_linewidth(2.3)
-ax3.spines['left'].set_linewidth(2.3)
-ax3.spines['right'].set_linewidth(2.3)
-ax3.spines['bottom'].set_linewidth(2.3)
-for tick in ax3.xaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-for tick in ax3.yaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-ax3.legend(label, loc='best', fancybox = True, shadow = True)
-# fig3.savefig('L1000_tot_zone_spherical_prof_multi_bin', format='pdf')
+# label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
+# ax3 = fig3.add_subplot(111)
+# #ax3.set_xlim(0,33)
+# ax3.set_ylim(0,2)
+# ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
+# ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
+# ax3.plot(R_stk, (np.array(avg_nden_sm)/tot_numden), linewidth=3)
+# ax3.plot(R_stk, (np.array(avg_nden_md)/tot_numden), linewidth=3, linestyle='--')
+# ax3.plot(R_stk, (np.array(avg_nden_lg)/tot_numden), linewidth=3, linestyle='-.')
+# ax3.spines['top'].set_linewidth(2.3)
+# ax3.spines['left'].set_linewidth(2.3)
+# ax3.spines['right'].set_linewidth(2.3)
+# ax3.spines['bottom'].set_linewidth(2.3)
+# for tick in ax3.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax3.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# ax3.legend(label, loc='best', fancybox = True, shadow = True)
+# # fig3.savefig('L1000_tot_zone_spherical_prof_multi_bin', format='pdf')
 
 
-# Create density contrast vs R_v for stacked voids with vol avg center
-label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
-ax4 = fig4.add_subplot(111)
-#ax4.set_xlim(0,33)
-ax4.set_ylim(0,2)
-ax4.set_xlabel(r'$\mathrm{r/R_{zone}}$')
-ax4.set_ylabel(r'$\mathrm{\delta(r)+1}$')
-ax4.plot(R_stk, (np.array(avg_nden_sm_vol)/tot_numden), linewidth=3)
-ax4.plot(R_stk, (np.array(avg_nden_md_vol)/tot_numden), linewidth=3, linestyle='--')
-ax4.plot(R_stk, (np.array(avg_nden_lg_vol)/tot_numden), linewidth=3, linestyle='-.')
-ax4.spines['top'].set_linewidth(2.3)
-ax4.spines['left'].set_linewidth(2.3)
-ax4.spines['right'].set_linewidth(2.3)
-ax4.spines['bottom'].set_linewidth(2.3)
-for tick in ax4.xaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-for tick in ax4.yaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-ax4.legend(label, loc='best', fancybox = True, shadow = True)
-# fig4.savefig('L1000_tot_zone_spherical_prof_multi_bin_vol_center', format='pdf')
+# # Create density contrast vs R_v for stacked voids with vol avg center
+# label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
+# ax4 = fig4.add_subplot(111)
+# #ax4.set_xlim(0,33)
+# ax4.set_ylim(0,2)
+# ax4.set_xlabel(r'$\mathrm{r/R_{zone}}$')
+# ax4.set_ylabel(r'$\mathrm{\delta(r)+1}$')
+# ax4.plot(R_stk, (np.array(avg_nden_sm_vol)/tot_numden), linewidth=3)
+# ax4.plot(R_stk, (np.array(avg_nden_md_vol)/tot_numden), linewidth=3, linestyle='--')
+# ax4.plot(R_stk, (np.array(avg_nden_lg_vol)/tot_numden), linewidth=3, linestyle='-.')
+# ax4.spines['top'].set_linewidth(2.3)
+# ax4.spines['left'].set_linewidth(2.3)
+# ax4.spines['right'].set_linewidth(2.3)
+# ax4.spines['bottom'].set_linewidth(2.3)
+# for tick in ax4.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax4.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# ax4.legend(label, loc='best', fancybox = True, shadow = True)
+# # fig4.savefig('L1000_tot_zone_spherical_prof_multi_bin_vol_center', format='pdf')
 
 
-plt.show()
+# plt.show()
