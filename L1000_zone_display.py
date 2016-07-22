@@ -30,6 +30,12 @@ adj_dict = read_adj('adj.txt')
 
 Lbox = 1000
 
+def rm_duplicate(seq):
+	# Removes duplicates in array while preserving order
+    seen = set()
+    seen_add = seen.add
+    return [x for x in seq if not (x in seen or seen_add(x))]
+
 def percent_diff(x,y):
 	# Both values mean the same kind of thing (one value is not obviously older or better than the other
 	percent_diff = abs((x-y)/((x+y)/2.))*100.
@@ -114,6 +120,57 @@ def spherical_stk(zone_rad_stk,x_zone_stk,y_zone_stk,z_zone_stk,numzone_stk):
 
 	return avg_count, avg_nden, R_stk
 
+def vol_avg_center(x_cell,y_cell,z_cell, x_adj,y_adj,z_adj, v_cell,v_adj):
+	# Gets volume weighted average location of a cell and it's adjacency
+	# The collection of these volume weighted locations is the location of the boundary for the zone
+	# Volume weighted average is obtained by this formula: (x_cell*vol_cell + x_adj[i]*vol_adj[i])/(vol_cell+vol_adj[i])
+	# Note that x_adj[i] and vol_adj[i] may contain more than one value so this is a summation
+	# Same procedure for y and z
+
+	x_vol_avg = []
+	y_vol_avg = []
+	z_vol_avg = []
+
+	# Loop over all cells that are on the boundary of a zone
+	for l in range(0,len(v_cell)):
+		# Numerator for xyz
+		num_x_adj = sum([x*volx for x,volx in zip(x_adj[l],v_adj[l])])
+		num_x = num_x_adj + (x_cell[l]*v_cell[l])
+
+		num_y_adj = sum([y*voly for y,voly in zip(y_adj[l],v_adj[l])])
+		num_y = num_y_adj + (y_cell[l]*v_cell[l])
+		
+		num_z_adj = sum([z*volz for z,volz in zip(z_adj[l],v_adj[l])])
+		num_z = num_z_adj + (z_cell[l]*v_cell[l])
+
+		# Denominator
+		dem = v_cell[l]+sum(v_adj[l])
+
+		x_vol_avg.append(num_x/dem)
+		y_vol_avg.append(num_y/dem)
+		z_vol_avg.append(num_z/dem)
+
+	return x_vol_avg, y_vol_avg, z_vol_avg
+
+def boundary_bin(den, dist, min_bin, max_bin):
+	# Function to bin the boundary distance profile
+	# den is an array of densities for each particle in a zone
+	# dist is an array of distance of each particle to the closest "boundary particle"
+	# min and max are the upper and lower bounds of the bin
+
+	cnt = 0.
+	bin_den_temp = []
+	bin_dist = []
+	for i,t in enumerate(dist):
+		if t > min_bin and t <= max_bin:
+			bin_dist.append(t)
+			bin_den_temp.append(den[i])
+			cnt += 1.
+	
+	bin_den = (sum(bin_den_temp)/cnt)
+
+	return bin_den, bin_dist, cnt
+
 # Array of effective radius of each cell
 r_eff = []
 for v in vol:
@@ -148,18 +205,21 @@ for (i,t) in enumerate(zone):
 ### FIND TOTAL VOLUME AND EFFECTIVE RADIUS OF A ZONE ###########################################################
 
 tot_zone_vol = 0
+vol_same_zone = []
 
 for n in same_zone_id:
 	tot_zone_vol += vol[n]
+	vol_same_zone.append(vol[n])
 
 r_eff_zone_tot = (tot_zone_vol*(3./(4*pi)))**(1./3.)
 
-### GET COORDINATES OF PARTICLES THAT BELONG TO ZONE BELONG TO ZONE #####################################################
+### GET COORDINATES, RADIUS, AND ADJACENCIES OF PARTICLES THAT BELONG TO ZONE BELONG TO ZONE #####################################################
 
 x_same_zone = []
 y_same_zone = []
 z_same_zone = []
 r_eff_same_zone = []
+same_zone_adj = []
 
 for valx in same_zone_id:
 	x_same_zone.append(x[valx])
@@ -173,6 +233,10 @@ for valz in same_zone_id:
 for valrad in same_zone_id:
 	r_eff_same_zone.append(r_eff[valrad])
 
+for valadj in same_zone_id:
+	# Gets array of indices of adjacent particles to each particle in a specific zone
+	same_zone_adj.append(adj_dict[valadj])
+
 ### CREATE SLICE IN THE Z DIMENSION ########################################################
 
 x_slice = []
@@ -184,8 +248,11 @@ y_slice_zone = []
 slice_zone_idx = []
 r_eff_zone_slice = []
 
-slice_max = (4.5*r_eff[arb_ind]+z[arb_ind])
-slice_min = (z[arb_ind]-4.5*r_eff[arb_ind])
+mult = 4.5
+mult2 = 4.5
+
+slice_max = (mult2*r_eff[arb_ind]+z[arb_ind])
+slice_min = (z[arb_ind]-mult2*r_eff[arb_ind])
 
 
 # Loop over halo z values and create a slice in the cube with the size of the effective radius 
@@ -207,6 +274,60 @@ for i in slice_zone_idx:
 	r_eff_zone_slice.append(r_eff_same_zone[i])
 
 denminrad = np.int(find_nearest(x_slice_zone, x_denmin[np.int(zone[arb_ind])]))
+
+#################################################################################
+
+#### GET ADJACENT PARTICLES THAT ARE NOT PART OF THE ZONE ###########################
+x_non_zone_adj = []
+y_non_zone_adj = []
+z_non_zone_adj = []
+x_non_zone_adj_arr = []
+y_non_zone_adj_arr = []
+z_non_zone_adj_arr = []
+adj_cell_vol = []
+cell_on_boundary_temp = [] # ID of cells that have adjacent cells not in the same zone
+
+for a in range(0, len(same_zone_adj)):
+	adj_cell_vol_temp = []
+	x_non_zone_adj_temp = []
+	y_non_zone_adj_temp = []
+	z_non_zone_adj_temp = []
+	for b in same_zone_adj[a]:
+		if zone[b] != zone[arb_ind] and z[b] <= slice_max/mult and z[b] >= slice_min/mult:
+			# xyz in order for plots
+			x_non_zone_adj.append(x[b])
+			y_non_zone_adj.append(y[b])
+			z_non_zone_adj.append(z[b])
+
+			# xyz as array of arrays for each adjacency 
+			x_non_zone_adj_temp.append(x[b])
+			y_non_zone_adj_temp.append(y[b])
+			z_non_zone_adj_temp.append(z[b])
+
+			# Get volume for each adjacency
+			adj_cell_vol_temp.append(vol[b])
+
+			# Get ID of cell thats on a boundary
+			cell_on_boundary_temp.append(same_zone_id[a])
+			
+	# Gets array of arrays which contain volumes for each adjacent cell not part of zone for each particle in same_zone_adj
+	if adj_cell_vol_temp != []:
+		adj_cell_vol.append(adj_cell_vol_temp) 
+		x_non_zone_adj_arr.append(x_non_zone_adj_temp)
+		y_non_zone_adj_arr.append(y_non_zone_adj_temp)
+		z_non_zone_adj_arr.append(z_non_zone_adj_temp)
+
+
+
+# Remove duplicate IDs of cells that are on a boundary
+cell_on_boundary = rm_duplicate(cell_on_boundary_temp)
+
+
+# Volume weighted average of boundary
+x_vol_avg, y_vol_avg, z_vol_avg = vol_avg_center(x[cell_on_boundary],y[cell_on_boundary],z[cell_on_boundary], x_non_zone_adj_arr,y_non_zone_adj_arr,z_non_zone_adj_arr, vol[cell_on_boundary],adj_cell_vol)
+
+
+
 ### CREATE TREE FOR X,Y,Z COORDINATES FOR ALL HALOS #########################
 
 # Create tree with period boundary conditions
@@ -217,7 +338,7 @@ periodic_tree = PeriodicCKDTree(bounds, halos)
 #############################################################################
 
 
-### CREATE SPHERICAL DENSITY PROFILE FOR A SINGLE VOID ###############################
+### CREATE SPHERICAL DENSITY PROFILE FOR A SINGLE ZONE ###############################
 
 # This will take any void and build shells around it up to 2*R_v
 # and find the number density per shell using the volume of the shell.
@@ -333,10 +454,10 @@ avg_nden_temp_md = []
 avg_count_temp_lg = []
 avg_nden_temp_lg = []
 
-print 'number of small zones', numzone_stk_sm
-print 'number of medium zones', numzone_stk_md
-print 'number of large zones', numzone_stk_lg
-print ''
+# print 'number of small zones', numzone_stk_sm
+# print 'number of medium zones', numzone_stk_md
+# print 'number of large zones', numzone_stk_lg
+# print ''
 
 
 ### XYZ of den min center
@@ -361,16 +482,53 @@ print ''
 
 ##################################################################################################################################################
 
-#### GET ADJACENCIES FOR EACH HALO ####
+### CREATE BOUNDARY DISTANCE PROFILE FOR A SINGLE ZONE ###############################
+
+# Create tree of volume weighted boundary points
+boundary_pts = zip(x_vol_avg, y_vol_avg, z_vol_avg)
+periodic_tree_boundary = PeriodicCKDTree(bounds, boundary_pts)
 
 
+cls_dist = []
+cls_idx = []
+for i in range(0,len(x_same_zone)):
+	cls_dist.append(periodic_tree_boundary.query([x_same_zone[i],y_same_zone[i],z_same_zone[i]])[0])
+	cls_idx.append(periodic_tree_boundary.query([x_same_zone[i],y_same_zone[i],z_same_zone[i]])[1])
+
+# Calculate density for each cell in the zone
+den_same_zone = [(1./vol) for vol in vol_same_zone]
+
+
+# Bin boundary profiles
+
+delta_d = 5.
+
+bins = arange(0,max(cls_dist)+delta_d,delta_d)
+bins_mid = []
+den_bins = [] 
+dist_bins = []
+nden_bins = []
+for i in range(0,len(bins)-1):
+	bins_mid.append(-(bins[i]+bins[i+1])/2)
+
+	den_temp, dist_temp, nden_temp = boundary_bin(den_same_zone, cls_dist, bins[i], bins[i+1])
+
+	den_bins.append(den_temp)
+	dist_bins.append(dist_temp)
+	nden_bins.append(nden_temp)
+
+
+# den_20, dist_20, nden_20 = boundary_bin(den_same_zone, cls_dist, 0., 5.)
+# den_40, dist_40, nden_40 = boundary_bin(den_same_zone, cls_dist, 5., 10.)
+# den_60, dist_60, nden_60 = boundary_bin(den_same_zone, cls_dist, 10., 15.)
+# den_max, dist_max, nden_max = boundary_bin(den_same_zone, cls_dist, 15., 20)
 
 
 
 ### PRINT STATEMENTS ##############################################################################
 
-print 'x,y,z', x[arb_ind], y[arb_ind], z[arb_ind]
-print 'x,y,z of den min of largest zone', x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]
+# print 'x,y,z', x[arb_ind], y[arb_ind], z[arb_ind]
+# print 'x,y,z of den min of largest zone', x_denmin[np.int(zone[arb_ind])], y_denmin[np.int(zone[arb_ind])], z_denmin[np.int(zone[arb_ind])]
 print 'radius of largest cell in zone slice', max(r_eff_same_zone)
 # print 'vol',vol[arb_ind]
 print 'radius of density min cell of zone', r_eff_zone_slice[denminrad]
@@ -386,6 +544,8 @@ print 'zone radius from adding cell volumes', r_eff_zone_tot
 print 'max zone radius', max(zone_rad)
 print ''
 
+print 'num of boundary cells', len(cell_on_boundary)
+
 t_end = time.time()
 print 'time of code: \t%g minutes' % ((t_end-t_begin)/60.)
 
@@ -395,38 +555,40 @@ print 'time of code: \t%g minutes' % ((t_end-t_begin)/60.)
 
 ###################################################################################################
 
-fig1 = plt.figure(figsize=(12,10))
+# fig1 = plt.figure(figsize=(12,10))
 # fig2 = plt.figure(figsize=(12,10))
-fig3 = plt.figure(figsize=(12,10))
-fig4 = plt.figure(figsize=(12,10))
+# fig3 = plt.figure(figsize=(12,10))
+# fig4 = plt.figure(figsize=(12,10))
+fig5 = plt.figure(figsize=(12,10))
+fig6 = plt.figure(figsize=(12,10))
 
 # Create scatter plot of all halos in slice and all halos representing void centers
-ax1 = fig1.add_subplot(111)
-ax1.set_xlim(200,500)
-ax1.set_ylim(550,850)
-ax1.set_xlabel(r'$\mathrm{x}$')
-ax1.set_ylabel(r'$\mathrm{y}$')
-ax1.scatter(x_slice, y_slice, color='red', marker='o')
-ax1.scatter(x_slice_zone, y_slice_zone, color='green', marker='s')
-# ax1.scatter(x[arb_ind], y[arb_ind], color='black', marker='d', s=4)
-circ2=plt.Circle((x_denmin[np.int(zone[arb_ind])],y_denmin[np.int(zone[arb_ind])]),zone_rad[np.int(zone[arb_ind])], fill=None)
-for i in range(0,len(slice_zone_idx)):
-	circ=plt.Circle((x_slice_zone[i],y_slice_zone[i]),r_eff_zone_slice[i]*0.5, color='b', alpha=0.5)
-	ax1.add_artist(circ)
-# circ=plt.Circle((x[arb_ind],y[arb_ind]),r_eff[arb_ind], color='black', alpha=0.5)
-ax1.scatter(x_denmin[np.int(zone[arb_ind])],y_denmin[np.int(zone[arb_ind])], color='black', marker='d', s=100)
-ax1.scatter(x_vol[np.int(zone[arb_ind])],y_vol[np.int(zone[arb_ind])], color='black', marker='+', s=100)
-ax1.add_artist(circ)
-ax1.add_artist(circ2)
-ax1.spines['top'].set_linewidth(2.3)
-ax1.spines['left'].set_linewidth(2.3)
-ax1.spines['right'].set_linewidth(2.3)
-ax1.spines['bottom'].set_linewidth(2.3)
-for tick in ax1.xaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-for tick in ax1.yaxis.get_major_ticks():
-    tick.label.set_fontsize(27)   
-# fig1.savefig('Zone_2131', format='pdf')
+# ax1 = fig1.add_subplot(111)
+# ax1.set_xlim(200,500)
+# ax1.set_ylim(550,850)
+# ax1.set_xlabel(r'$\mathrm{x}$')
+# ax1.set_ylabel(r'$\mathrm{y}$')
+# ax1.scatter(x_slice, y_slice, color='red', marker='o')
+# ax1.scatter(x_slice_zone, y_slice_zone, color='green', marker='s')
+# # ax1.scatter(x[arb_ind], y[arb_ind], color='black', marker='d', s=4)
+# circ2=plt.Circle((x_denmin[np.int(zone[arb_ind])],y_denmin[np.int(zone[arb_ind])]),zone_rad[np.int(zone[arb_ind])], fill=None)
+# for i in range(0,len(slice_zone_idx)):
+# 	circ=plt.Circle((x_slice_zone[i],y_slice_zone[i]),r_eff_zone_slice[i]*0.5, color='b', alpha=0.5)
+# 	ax1.add_artist(circ)
+# # circ=plt.Circle((x[arb_ind],y[arb_ind]),r_eff[arb_ind], color='black', alpha=0.5)
+# ax1.scatter(x_denmin[np.int(zone[arb_ind])],y_denmin[np.int(zone[arb_ind])], color='black', marker='d', s=100)
+# ax1.scatter(x_vol[np.int(zone[arb_ind])],y_vol[np.int(zone[arb_ind])], color='black', marker='+', s=100)
+# ax1.add_artist(circ)
+# ax1.add_artist(circ2)
+# ax1.spines['top'].set_linewidth(2.3)
+# ax1.spines['left'].set_linewidth(2.3)
+# ax1.spines['right'].set_linewidth(2.3)
+# ax1.spines['bottom'].set_linewidth(2.3)
+# for tick in ax1.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax1.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)   
+# # fig1.savefig('Zone_2131', format='pdf')
 
 # # Create density contrast vs R_v for single void up to 2*R_v
 # ax2 = fig2.add_subplot(111)
@@ -490,4 +652,46 @@ for tick in ax1.yaxis.get_major_ticks():
 # # fig4.savefig('L1000_tot_zone_spherical_prof_multi_bin_vol_center', format='pdf')
 
 
-# plt.show()
+# Plot of adjacencies
+ax5 = fig5.add_subplot(111)
+# ax5.set_xlim(200,500)
+# ax5.set_ylim(550,850)
+ax5.set_xlabel(r'$\mathrm{x}$')
+ax5.set_ylabel(r'$\mathrm{y}$')
+ax5.scatter(x_slice, y_slice, color='red', marker='o')
+ax5.scatter(x_slice_zone, y_slice_zone, color='green', marker='s')
+circ2=plt.Circle((x_denmin[np.int(zone[arb_ind])],y_denmin[np.int(zone[arb_ind])]),zone_rad[np.int(zone[arb_ind])], fill=None)
+# circ=plt.Circle((x[arb_ind],y[arb_ind]),r_eff[arb_ind], color='black', alpha=0.5)
+ax5.scatter(x_non_zone_adj, y_non_zone_adj, color='blue', marker='*', s=100)
+ax5.scatter(x_vol_avg, y_vol_avg, color='purple', marker='^', s=100)
+ax5.scatter(x_denmin[np.int(zone[arb_ind])],y_denmin[np.int(zone[arb_ind])], color='black', marker='d', s=100)
+ax5.scatter(x_vol[np.int(zone[arb_ind])],y_vol[np.int(zone[arb_ind])], color='black', marker='+', s=100)
+ax5.add_artist(circ2)
+ax5.spines['top'].set_linewidth(2.3)
+ax5.spines['left'].set_linewidth(2.3)
+ax5.spines['right'].set_linewidth(2.3)
+ax5.spines['bottom'].set_linewidth(2.3)
+for tick in ax5.xaxis.get_major_ticks():
+    tick.label.set_fontsize(27)
+for tick in ax5.yaxis.get_major_ticks():
+    tick.label.set_fontsize(27)   
+# fig5.savefig('Zone_2131_adj_halos', format='pdf')
+
+ax6 = fig6.add_subplot(111)
+# ax6.set_xlim(0,33)
+# ax6.set_ylim(0,2)
+ax6.set_xlabel(r'$\mathrm{R_v}$')
+ax6.set_ylabel(r'$\mathrm{\delta(r)+1}$') 
+ax6.plot(bins_mid, den_bins, linewidth=3)
+ax6.spines['top'].set_linewidth(2.3)
+ax6.spines['left'].set_linewidth(2.3)
+ax6.spines['right'].set_linewidth(2.3)
+ax6.spines['bottom'].set_linewidth(2.3)
+for tick in ax6.xaxis.get_major_ticks():
+    tick.label.set_fontsize(27)
+for tick in ax6.yaxis.get_major_ticks():
+    tick.label.set_fontsize(27)
+# ax6.legend(loc='best', fancybox = True, shadow = True)
+
+
+plt.show()
