@@ -142,26 +142,27 @@ def vol_avg_center(x_cell,y_cell,z_cell, x_adj,y_adj,z_adj, v_cell,v_adj):
 
 	return x_vol_avg, y_vol_avg, z_vol_avg
 
-def boundary_bin(den, dist, min_bin, max_bin):
+def boundary_bin(vm, dist, min_bin, max_bin):
 	# Function to bin the boundary distance profile
 	# den is an array of densities for each particle in a zone
 	# dist is an array of distance of each particle to the closest "boundary particle"
 	# min and max are the upper and lower bounds of the bin
 
 	cnt = 0.
-	bin_den_temp = []
+	bin_vol_temp = []
 	bin_dist = []
 	for i,t in enumerate(dist):
 		if t > min_bin and t <= max_bin:
 			bin_dist.append(t)
-			if not isnan(den[i]):
-				bin_den_temp.append(den[i])
+			if not isnan(vm[i]):
+				bin_vol_temp.append(vm[i])
+				cnt += 1.
 			else:
-				bin_den_temp.append(0)
-			cnt += 1.
+				bin_vol_temp.append(0)
+			# cnt += 1.
 
-	if sum(bin_den_temp) != 0.:
-		bin_den = (sum(bin_den_temp)/cnt)/(np.int(numpart)/(Lbox**3.))
+	if sum(bin_vol_temp) != 0.:
+		bin_den = ((1./sum(bin_vol_temp))*cnt)/(np.int(numpart)/(Lbox**3.))
 	else:
 		bin_den = 0.
 	
@@ -282,101 +283,103 @@ def adj_particles(same_zone_adj_bn):
 	return cell_on_boundary_tot, cell_on_boundary, x_non_zone_adj_arr_tot, y_non_zone_adj_arr_tot, z_non_zone_adj_arr_tot, adj_cell_vol_tot
 
 def boundary_stk(xvol, yvol, zvol, x_same_zone_bn, y_same_zone_bn, z_same_zone_bn, vol_same_zone_bn, zn, rad_val):
-		# This function takes in the location of the boundary points (likely volume averaged) and
-		# bins them to find the profile
+	# This function takes in the location of the boundary points (likely volume averaged) and
+	# bins them to find the profile
 
-		# Create tree of volume weighted boundary points
-		boundary_pts = zip(xvol, yvol, zvol) 
-		periodic_tree_boundary = PeriodicCKDTree(bounds, boundary_pts)
+	# Create tree of volume weighted boundary points
+	boundary_pts = zip(xvol, yvol, zvol) 
+	periodic_tree_boundary = PeriodicCKDTree(bounds, boundary_pts)
 
-		x_part = []
-		y_part = []
-		z_part = []
+	x_part = []
+	y_part = []
+	z_part = []
 
-		# Find particles within rad_val of zone radius that are not in zone
-		idx = periodic_tree.query_ball_point([x_vol[zn],y_vol[zn],z_vol[zn]],rad_val)
+	# Find particles within rad_val of zone radius that are not in zone
+	idx = periodic_tree.query_ball_point([x_vol[zn],y_vol[zn],z_vol[zn]],rad_val)
 
-		new_idx = [] # index of particles not in zone, but within 2*R_eff of zone
-		for i in idx:
-			if zone[i] != zn:
-				new_idx.append(i)
-				x_part.append(x[i])
-				y_part.append(y[i])
-				z_part.append(z[i])
+	new_idx = [] # index of particles not in zone, but within 2*R_eff of zone
+	for i in idx:
+		if zone[i] != zn:
+			new_idx.append(i)
+			x_part.append(x[i])
+			y_part.append(y[i])
+			z_part.append(z[i])
 
-		cls_dist = []
-		cls_idx = []
-		cls_dist_non_zn = []
-		cls_idx_non_zn = []
+	cls_dist = []
+	cls_idx = []
+	cls_dist_non_zn = []
+	cls_idx_non_zn = []
 
-		# Find closest distance for each particle in a zone to the boundary particle
-		for i in range(0,len(x_same_zone_bn)):
-			cls_dist.append(periodic_tree_boundary.query([x_same_zone_bn[i],y_same_zone_bn[i],z_same_zone_bn[i]])[0])
-			cls_idx.append(periodic_tree_boundary.query([x_same_zone_bn[i],y_same_zone_bn[i],z_same_zone_bn[i]])[1])
+	# Find closest distance for each particle in a zone to the boundary particle
+	for i in range(0,len(x_same_zone_bn)):
+		cls_dist.append(periodic_tree_boundary.query([x_same_zone_bn[i],y_same_zone_bn[i],z_same_zone_bn[i]])[0])
+		cls_idx.append(periodic_tree_boundary.query([x_same_zone_bn[i],y_same_zone_bn[i],z_same_zone_bn[i]])[1])
 
-		# Find closest distance for each particle not in a zone to the boundary particle
-		for i in range(0,len(x_part)):
-			cls_dist_non_zn.append(periodic_tree_boundary.query([x_part[i],y_part[i],z_part[i]])[0])
-			cls_idx_non_zn.append(periodic_tree_boundary.query([x_part[i],y_part[i],z_part[i]])[1])
+	# Find closest distance for each particle not in a zone to the boundary particle
+	for i in range(0,len(x_part)):
+		cls_dist_non_zn.append(periodic_tree_boundary.query([x_part[i],y_part[i],z_part[i]])[0])
+		cls_idx_non_zn.append(periodic_tree_boundary.query([x_part[i],y_part[i],z_part[i]])[1])
 
-		# Calculate density for each cell in the zone
-		den_same_zone_bn = [(1./volume) for volume in vol_same_zone_bn[0]]
+	# Calculate density for each cell in the zone
+	# den_same_zone_bn = [(1./volume) for volume in vol_same_zone_bn[0]]
+	vol_same_zone_bn = [(volume) for volume in vol_same_zone_bn[0]]
 
-		# Calculate density for each particle 
-		den_non_zn_part = []
-		for i in new_idx:
-			den_non_zn_part.append(1./vol[i])
+	# Calculate density for each particle 
+	vol_non_zn_part = []
+	for i in new_idx:
+		# den_non_zn_part.append(1./vol[i])
+		vol_non_zn_part.append(vol[i])
+	
+	# Bin the density, distance, and number counts from 0 to 2.5.  This binning is normalized to effective radius of each zone 
+	den_bins = [] 
+	dist_bins = []
+	ncnt_bins = []
 
-		# Bin the density, distance, and number counts from 0 to 2.5.  This binning is normalized to effective radius of each zone 
-		den_bins = [] 
-		dist_bins = []
-		ncnt_bins = []
+	den_bins_non_zn = []
+	dist_bins_non_zn = []
+	ncnt_bins_non_zn = []
 
-		den_bins_non_zn = []
-		dist_bins_non_zn = []
-		ncnt_bins_non_zn = []
+	# Find den, dist, cnt for particles in zone
+	for i in range(0,len(bins)-1):
+		# Density, distance, and num counts of for each bin.  Bins are normalized to the effective radius of each zone
+		den_temp, dist_temp, ncnt_temp = boundary_bin(vol_same_zone_bn, cls_dist, bins[i], bins[i+1])
 
-		# Find den, dist, cnt for particles in zone
-		for i in range(0,len(bins)-1):
-			# Density, distance, and num counts of for each bin.  Bins are normalized to the effective radius of each zone
-			den_temp, dist_temp, ncnt_temp = boundary_bin(den_same_zone_bn, cls_dist, bins[i], bins[i+1])
+		# Make arrays of den, dist, num counts of for bins
+		if den_temp != np.nan:
+			den_bins.append(den_temp)
+		else:
+			den_bins.append(0)
 
-			# Make arrays of den, dist, num counts of for bins
-			if den_temp != np.nan:
-				den_bins.append(den_temp)
-			else:
-				den_bins.append(0)
+		if dist_temp != np.nan:
+			dist_bins.append(dist_temp)
+		else:
+			dist_bins.append(0)
+		if ncnt_temp != np.nan:
+			ncnt_bins.append(ncnt_temp)
+		else:
+			ncnt_bins.append(0)
 
-			if dist_temp != np.nan:
-				dist_bins.append(dist_temp)
-			else:
-				dist_bins.append(0)
-			if ncnt_temp != np.nan:
-				ncnt_bins.append(ncnt_temp)
-			else:
-				ncnt_bins.append(0)
+	# Find den, dist, cnt for particle not in zone
+	for i in range(0,len(bins)-1):
+		# Density, distance, and num counts of for each bin.  Bins are normalized to the effective radius of each zone
+		den_temp2, dist_temp2, ncnt_temp2 = boundary_bin(vol_non_zn_part, cls_dist_non_zn, bins[i], bins[i+1])
 
-		# Find den, dist, cnt for particle not in zone
-		for i in range(0,len(bins)-1):
-			# Density, distance, and num counts of for each bin.  Bins are normalized to the effective radius of each zone
-			den_temp2, dist_temp2, ncnt_temp2 = boundary_bin(den_non_zn_part, cls_dist_non_zn, bins[i], bins[i+1])
+		# Make arrays of den, dist, num counts of for bins
+		if den_temp2 != np.nan:
+			den_bins_non_zn.append(den_temp2)
+		else:
+			den_bins_non_zn.append(0)
 
-			# Make arrays of den, dist, num counts of for bins
-			if den_temp2 != np.nan:
-				den_bins_non_zn.append(den_temp2)
-			else:
-				den_bins_non_zn.append(0)
+		if dist_temp2 != np.nan:
+			dist_bins_non_zn.append(dist_temp2)
+		else:
+			dist_bins.append(0)
+		if ncnt_temp2 != np.nan:
+			ncnt_bins_non_zn.append(ncnt_temp2)
+		else:
+			ncnt_bins_non_zn.append(0)
 
-			if dist_temp2 != np.nan:
-				dist_bins_non_zn.append(dist_temp2)
-			else:
-				dist_bins.append(0)
-			if ncnt_temp2 != np.nan:
-				ncnt_bins_non_zn.append(ncnt_temp2)
-			else:
-				ncnt_bins_non_zn.append(0)
-
-		return den_bins, dist_bins, ncnt_bins, den_bins_non_zn, dist_bins_non_zn, ncnt_bins_non_zn
+	return den_bins, dist_bins, ncnt_bins, den_bins_non_zn, dist_bins_non_zn, ncnt_bins_non_zn
 	
 # Array of effective radius of each cell
 r_eff = []
@@ -548,29 +551,29 @@ for i in range(0,len(R_shell)):
 zone_bins = np.linspace(0,max(zone_rad),10)
 
 # Create dictionary to store values for each output from the binning procedure
-# x_den_stk = {}
-# y_den_stk = {}
-# z_den_stk = {}
-# x_vol_stk = {}
-# y_vol_stk = {}
-# z_vol_stk = {}
-# zone_rad_stk = {}
-# zone_dencon_stk = {}
-# zn_stk = {}
-# num_zn_stk = {}
+x_den_stk = {}
+y_den_stk = {}
+z_den_stk = {}
+x_vol_stk = {}
+y_vol_stk = {}
+z_vol_stk = {}
+zone_rad_stk = {}
+zone_dencon_stk = {}
+zn_stk = {}
+num_zn_stk = {}
 
 
-# for i in range(0,len(zone_bins)-1):
-# 	# Loops over all the bins and puts xyz (den and vol), zone radii, zone dencon, num of zones in bin, and zone ID into dictionary
-# 	# Note that values of the dictionary are referred to as the upper value of the bin
-# 	# eg there will be no '0' entry, but will be a 'max(zone_radius)' entry
-# 	x_den_stk[i],y_den_stk[i],z_den_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],zone_rad_stk[i],zone_dencon_stk[i],zn_stk[i] = bin_zone(x_denmin,y_denmin,z_denmin, x_vol,y_vol,z_vol, zone_rad, dencon, zone_bins[i], zone_bins[i+1])
-# 	num_zn_stk[i] = len(zone_rad_stk[i])
+for i in range(0,len(zone_bins)-1):
+	# Loops over all the bins and puts xyz (den and vol), zone radii, zone dencon, num of zones in bin, and zone ID into dictionary
+	# Note that values of the dictionary are referred to as the upper value of the bin
+	# eg there will be no '0' entry, but will be a 'max(zone_radius)' entry
+	x_den_stk[i],y_den_stk[i],z_den_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],zone_rad_stk[i],zone_dencon_stk[i],zn_stk[i] = bin_zone(x_denmin,y_denmin,z_denmin, x_vol,y_vol,z_vol, zone_rad, dencon, zone_bins[i], zone_bins[i+1])
+	num_zn_stk[i] = len(zone_rad_stk[i])
 
 
-# # Create dictionaries for average counts, num den, and R_stk for each bins
-# avg_count_sph = {}
-# avg_nden_sph = {}
+# Create dictionaries for average counts, num den, and R_stk for each bins
+avg_count_sph = {}
+avg_nden_sph = {}
 
 # # Get avg counts and nden for each shell in each bin
 # for i in range(0,len(zone_bins)-1):
@@ -585,8 +588,6 @@ R_stk = np.linspace(0,2,20)
 
 
 # Load spherical avg counts and avg nden
-avg_count_sph = {}
-avg_nden_sph = {}
 for i in range(0,len(zone_bins)-1):
 	avg_count_sph[i], avg_nden_sph[i] = np.load('sph_count_nden_%2d.npy' % zone_bins[i+1])
 
@@ -600,6 +601,7 @@ for i in range(0,len(zone_bins)-1):
 # Bins and bin mids to be used for each zone.  These will be normalized to the effective zone radius
 # bins = np.linspace(0,3.0,20)
 bins = np.arange(0,150.,5)
+
 
 bins_mid_zn = []
 bins_mid_non_zn = []
@@ -620,11 +622,15 @@ dist_bins_tot_non_zn = np.zeros(len(bins))
 ncnt_bins_tot_non_zn = np.zeros(len(bins))
 zn_cnt = 0
 
+# Create dict of all the bins to access for plotting
+den_bins_all_dict = {}
+
 # for i in range(0,len(zone_bins)-1):
-# 	print i
+# 	print 'num of zones in %d' % i, len(zn_stk[i])
 # 	for zn in zn_stk[i]:
 
-# 		# Loop over all zones and get index for each particle in that zone
+# 	# Loop over all zones and get index for each particle in that zone
+
 # 		same_zone_id_bn = np.where(zone == zn)
 
 # 		tot_zone_vol_bn = 0
@@ -670,7 +676,7 @@ zn_cnt = 0
 
 # 		### CREATE BOUNDARY DISTANCE PROFILE FOR A SINGLE ZONE AND APPEND TO STACKED VALUE ###############################
 # 		den_bins, dist_bins, ncnt_bins, den_bins_non_zn, dist_bins_non_zn, ncnt_bins_non_zn = boundary_stk(x_vol_avg,y_vol_avg,z_vol_avg, x_same_zone_bn,y_same_zone_bn,z_same_zone_bn, vol_same_zone_bn, zn, 150)
-		
+
 
 # 		# Add the values of density, distance, and num counts to each bin
 # 		for l in range(0, len(den_bins)):
@@ -692,27 +698,29 @@ zn_cnt = 0
 # 				ncnt_bins_tot_non_zn[l] += ncnt_bins_non_zn[l]
 
 # 	# Divide each value in the density, distance, and number counts by the number of zones
-# 	den_bins_tot = den_bins_tot/len(ID)
-# 	dist_bins_tot = dist_bins_tot/len(ID)
-# 	ncnt_bins_tot = ncnt_bins_tot/len(ID)
+# 	den_bins_tot = den_bins_tot/len(zn_stk[i])
+# 	dist_bins_tot = dist_bins_tot/len(zn_stk[i])
+# 	ncnt_bins_tot = ncnt_bins_tot/len(zn_stk[i])
 
-# 	den_bins_tot_non_zn = den_bins_tot_non_zn/len(ID)
-# 	dist_bins_tot_non_zn = dist_bins_tot_non_zn/len(ID)
-# 	ncnt_bins_tot_non_zn = ncnt_bins_tot_non_zn/len(ID)
+# 	den_bins_tot_non_zn = den_bins_tot_non_zn/len(zn_stk[i])
+# 	dist_bins_tot_non_zn = dist_bins_tot_non_zn/len(zn_stk[i])
+# 	ncnt_bins_tot_non_zn = ncnt_bins_tot_non_zn/len(zn_stk[i])
 
 # 	# Reverse den_bins_tot to add 
 # 	den_bins_tot_rev = den_bins_tot[::-1]
 
 # 	den_bins_all = np.append(den_bins_tot_rev[1:],den_bins_tot_non_zn[:-1])
+# 	den_bins_all_dict[i] = den_bins_all
 
-# 	# Save den_bins_all for whichever bin 
-# 	np.save('den_bins_all_%2d' % zone_bins[i+1], (den_bins_all))
+	# Save den_bins_all for whichever bin 
+	# np.save('den_bins_all_69_test', (den_bins_all))
+	# np.save('den_bins_all_%2d' % zone_bins[i+1], (den_bins_all))
+	# db_all = np.load('den_bins_all_69_test.npy')
 
 
 # den_bins_all = np.load('den_bins_all_35_45.npy')
 
 # Load filesfor boundary stacked bins
-den_bins_all_dict = {}
 for i in range(0,len(zone_bins)-1):
 	den_bins_all_dict[i] = np.load('den_bins_all_%2d.npy' % zone_bins[i+1])
 
@@ -748,7 +756,7 @@ print 'time of code: \t%g minutes' % ((t_end-t_begin)/60.)
 
 # fig1 = plt.figure(figsize=(12,10))
 # fig2 = plt.figure(figsize=(12,10))
-fig3 = plt.figure(figsize=(12,10))
+# fig3 = plt.figure(figsize=(12,10))
 # fig4 = plt.figure(figsize=(12,10))
 # fig5 = plt.figure(figsize=(12,10))
 fig6 = plt.figure(figsize=(12,10))
@@ -806,28 +814,28 @@ linecycler = cycle(lines)
 
 
 # Create density contrast vs R_v for stacked voids
-label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
-ax3 = fig3.add_subplot(111)
-#ax3.set_xlim(0,33)
-ax3.set_ylim(0,3)
-ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
-ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
-for i in range(0,len(zone_bins)-1):
-	# if zone_rad_stk[i] != []:
-	ax3.plot(R_stk, (np.array(avg_nden_sph[i])/tot_numden), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler))
-# ax3.plot(R_stk, (np.array(avg_nden_sph[1])/tot_numden), linewidth=3, label='%2d' % zone_bins[2])
-# ax3.plot(R_stk, (np.array(avg_nden_sph[2])/tot_numden), linewidth=3, label='%2d' % zone_bins[3])
-# ax3.plot(R_stk, (np.array(avg_nden_sph[3])/tot_numden), linewidth=3, label='%2d' % zone_bins[4])
-ax3.spines['top'].set_linewidth(2.3)
-ax3.spines['left'].set_linewidth(2.3)
-ax3.spines['right'].set_linewidth(2.3)
-ax3.spines['bottom'].set_linewidth(2.3)
-for tick in ax3.xaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-for tick in ax3.yaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-ax3.legend(loc='best', fancybox = True, shadow = True)
-fig3.savefig('L1000_spherical_prof_stk_bin', format='pdf')
+# label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
+# ax3 = fig3.add_subplot(111)
+# #ax3.set_xlim(0,33)
+# ax3.set_ylim(0,3)
+# ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
+# ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
+# for i in range(0,len(zone_bins)-1):
+# 	# if zone_rad_stk[i] != []:
+# 	ax3.plot(R_stk, (np.array(avg_nden_sph[i])/tot_numden), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler))
+# # ax3.plot(R_stk, (np.array(avg_nden_sph[1])/tot_numden), linewidth=3, label='%2d' % zone_bins[2])
+# # ax3.plot(R_stk, (np.array(avg_nden_sph[2])/tot_numden), linewidth=3, label='%2d' % zone_bins[3])
+# # ax3.plot(R_stk, (np.array(avg_nden_sph[3])/tot_numden), linewidth=3, label='%2d' % zone_bins[4])
+# ax3.spines['top'].set_linewidth(2.3)
+# ax3.spines['left'].set_linewidth(2.3)
+# ax3.spines['right'].set_linewidth(2.3)
+# ax3.spines['bottom'].set_linewidth(2.3)
+# for tick in ax3.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax3.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# ax3.legend(loc='best', fancybox = True, shadow = True)
+# fig3.savefig('L1000_spherical_prof_stk_bin', format='pdf')
 
 
 # # Create density contrast vs R_v for stacked voids with vol avg center
@@ -883,6 +891,7 @@ ax6.set_xlim(-50,50)
 # ax6.set_ylim(0,2)
 ax6.set_xlabel(r'$\mathrm{{\it D} \hspace{0.5cm} [Mpc]}$')
 ax6.set_ylabel(r'$\mathrm{\delta({\it D})+1}$') 
+# ax6.plot(bins_mid_full, den_bins_all, linewidth=3, linestyle = next(linecycler))
 for i in range(0,len(zone_bins)-1):
 	# if zone_rad_stk[i] != []:
 	ax6.plot(bins_mid_full, den_bins_all_dict[i], linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler))
@@ -895,7 +904,7 @@ for tick in ax6.xaxis.get_major_ticks():
 for tick in ax6.yaxis.get_major_ticks():
     tick.label.set_fontsize(27)
 ax6.legend(loc='best', fancybox = True, shadow = True)
-fig6.savefig('Boundary_prof_stk_bin', format='pdf')
+# fig6.savefig('Boundary_prof_stk_bin', format='pdf')
 
 # Histogram of zone radii
 # ax7 = fig7.add_subplot(111)
