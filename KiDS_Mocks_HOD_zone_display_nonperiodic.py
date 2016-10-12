@@ -27,7 +27,7 @@ t_begin = time.time()
 LC = LC_cosmology()
 
 Lbox = 252.5
-pix_count = 7745
+pix_count = 1549#7745
 
 # WMAP9+SN+BAO cosmology
 LC.H0 = 68.98 #km s^{-1} Mpc^{-1} 
@@ -57,10 +57,36 @@ x,y,z = read_LC_gal_pos('KiDS_Mocks_0_221_LC.txt')
 ID_all, x_vol_all, y_vol_all, z_vol_all, x_denmin_all, y_denmin_all, z_denmin_all, zone_rad_all, dencon_all = read_vol_zone_txt('KiDS_Mocks_0_221.vol.zone.txt')
 adj_dict = read_adj('KiDS_Mocks_0_221.adj.txt')
 numpart_0_221, x_gal_0_221,y_gal_0_221,z_gal_0_221, x_halo_0_221,y_halo_0_221,z_halo_0_221, m200c_0_221, r200c_0_221, Rs_0_221, c_0_221 = read_HOD('L505Mpc_HOD+0.221.dat')
-fits = fits.open('../kappa_0.582_mass.dat_LOS500.fits')
+# kappa_fits = fits.open('../kappa_0.582_mass.dat_LOS500.fits')
+kappa_LoRes = fits.open('../kappa_0.582_mass.dat_LOS500_LoRes.fits')
+
+### DOWNGRADE KAPPA RESOLUTION ##############################################
+
+# Open some Fits image called kappa_fits 
+# kappa_fits has dimensions of 7745*7745 --> I am lowering its resolution by factor of 5 on each axis
+
+# Now lower the resolution of this thing to 1549*1549
+
+# kappa_LoRes = fits.PrimaryHDU() # Make a new fits image object
+# kappa_LoRes.data = np.empty([1549, 1549])
+	
+
+# Averaging the pixels in blocks of (4)^2 pxls^2 
+# jump = int(len(kappa_fits[0].data[0,:])/len(kappa_LoRes.data[0,:])) # =5
+	
+
+# For loop goes through pxls of lo res mask: 1549*1549
+# for x in range(0, len(kappa_LoRes.data[0,:]) ):	
+# 	for y in range(0, len(kappa_LoRes.data[:,0]) ):
+# 		avg_pxls = np.sum(kappa_fits[0].data[y*jump:(y+1)*jump, x*jump:(x+1)*jump])/(jump*jump)
+# 		kappa_LoRes.data[y,x] = avg_pxls
+# kappa_LoRes.writeto('../kappa_0.582_mass.dat_LOS500_LoRes.fits', output_verify='ignore', clobber=True)
+
+############################################################################################
 
 ### GET KAPPA VALUES AND PIXELS ##############################################
-kappa = fits[0].data
+# kappa = kappa_fits[0].data # Regular resolution kappa
+kappa = kappa_LoRes[0].data # Lower resolution kappa
 x_pix = np.arange(0,pix_count,1)
 y_pix = np.arange(0,pix_count,1)
 kappa_loc = [x_pix for i in range(pix_count)]
@@ -921,7 +947,7 @@ avg_kappa_sph = {}
 # Get avg counts and nden for each shell in each bin
 for i in range(0,len(zone_bins)-1):
 	if zone_rad_stk[i] != []:
-		avg_count_sph[i], avg_den_sph[i] = spherical_stk(zone_rad_stk[i],zone_rad_pix_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
+		# avg_count_sph[i], avg_den_sph[i] = spherical_stk(zone_rad_stk[i],zone_rad_pix_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
 		avg_kappa_sph[i], avg_kappa_std_dev[i] = sph_kappa_stk(zone_rad_pix_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
 
 		# np.save('sph_kappa_Mocks_%d' % zone_bins[i+1], (avg_kappa_sph[i], avg_kappa_std_dev[i]))
@@ -1113,7 +1139,7 @@ print 'time of code: \t%g minutes' % ((t_end-t_begin)/60.)
 
 # fig1 = plt.figure(figsize=(10,8))
 # fig2 = plt.figure(figsize=(10,8))
-fig3 = plt.figure(figsize=(10,8))
+# fig3 = plt.figure(figsize=(10,8))
 # fig4 = plt.figure(figsize=(10,8))
 # fig5 = plt.figure(figsize=(10,8))
 # fig6 = plt.figure(figsize=(10,8))
@@ -1174,25 +1200,25 @@ linecycler = cycle(lines)
 
 
 # Create density contrast vs R_v for stacked voids
-label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
-ax3 = fig3.add_subplot(111)
-#ax3.set_xlim(0,33)
-# ax3.set_ylim(0,2)
-ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
-ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
-for i in range(1,len(zone_bins)-1):
-	# if zone_rad_stk[i] != []:
-	ax3.plot(R_stk, np.array(avg_den_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = next(colorcycler))
-ax3.spines['top'].set_linewidth(2.3)
-ax3.spines['left'].set_linewidth(2.3)
-ax3.spines['right'].set_linewidth(2.3)
-ax3.spines['bottom'].set_linewidth(2.3)
-for tick in ax3.xaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-for tick in ax3.yaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-ax3.legend(loc='best', fancybox = True, shadow = True)
-fig3.savefig('KiDS_Mocks_0_221_spherical_prof_stk_bin', format='pdf')
+# label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
+# ax3 = fig3.add_subplot(111)
+# #ax3.set_xlim(0,33)
+# # ax3.set_ylim(0,2)
+# ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
+# ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
+# for i in range(0,len(zone_bins)-1):
+# 	# if zone_rad_stk[i] != []:
+# 	ax3.plot(R_stk, np.array(avg_den_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = next(colorcycler))
+# ax3.spines['top'].set_linewidth(2.3)
+# ax3.spines['left'].set_linewidth(2.3)
+# ax3.spines['right'].set_linewidth(2.3)
+# ax3.spines['bottom'].set_linewidth(2.3)
+# for tick in ax3.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax3.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# ax3.legend(loc='best', fancybox = True, shadow = True, ncol=2)
+# fig3.savefig('KiDS_Mocks_0_221_spherical_prof_stk_bin', format='pdf')
 
 
 # # Create density contrast vs R_v for stacked voids with vol avg center
@@ -1297,7 +1323,7 @@ for tick in ax8.xaxis.get_major_ticks():
 for tick in ax8.yaxis.get_major_ticks():
     tick.label.set_fontsize(27)
 ax8.legend(loc='best', fancybox = True, shadow = True, ncol = 2)
-fig8.savefig('KiDS_Mocks_0_221_kappa_sph_err', format='pdf')
+# fig8.savefig('KiDS_Mocks_0_221_kappa_sph_err', format='pdf')
 
 
 plt.show()
