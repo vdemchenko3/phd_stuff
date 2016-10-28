@@ -27,13 +27,13 @@ t_begin = time.time()
 LC = LC_cosmology()
 
 Lbox = 252.5
-pix_count = 1549#7745
+pix_count = 1549#7745#
 
 # WMAP9+SN+BAO cosmology
 LC.H0 = 68.98 #km s^{-1} Mpc^{-1} 
 LC.omega_m = 0.2905
 LC.omega_L = 0.7095
-LC.z_box = 0.221
+LC.z_box = 0.525
 LC.Lbox_full = 505. #Mpc/h this is the size of the simulation box that the light cone was in, but only half of it is used so it's 252.5 Mpc/h
 LC.theta = 10. #degrees on sky of each mock
 LC.Lcube = 265.
@@ -45,18 +45,24 @@ D_box, D_low, D_upper, DA_low, DA_upper = LC.comoving_dist()
 ### VOLUMES ###############################################################
 
 # Volume of light cone
-vol_cone = (1./3.)*(DA_low**2 + (DA_low*DA_upper) + DA_upper**2)*(LC.Lbox_full/2.)
+# vol_cone = (1./3.)*(DA_low**2 + (DA_low*DA_upper) + DA_upper**2)*(LC.Lbox_full/2.)
+vol_cone = (1./3.)*DA_upper**2*D_upper # This is the volume if you have a whole light cone from z_i = 0 to some z 
 
 
 ### LOAD DATA ###############################################################
 
-numpart, numzones, zone = read_zone('KiDS_Mocks_0_221.zone')
+numpart, numzones, zone = read_zone('KiDS_Mocks_upto_z_525.zone')
 # numpart, numzones, zone = read_zone('Test_L1000/AllHalo_1000Mpc_wrapped_cai.zone')
-numpart_vol, vol, non_zero_idx = read_vol('KiDS_Mocks_0_221.vol.txt', vol_cone)
-x,y,z = read_LC_gal_pos('KiDS_Mocks_0_221_LC.txt')
-ID_all, x_vol_all, y_vol_all, z_vol_all, x_denmin_all, y_denmin_all, z_denmin_all, zone_rad_all, dencon_all = read_vol_zone_txt('KiDS_Mocks_0_221.vol.zone.txt')
-adj_dict = read_adj('KiDS_Mocks_0_221.adj.txt')
+numpart_vol, vol, non_zero_idx = read_vol('KiDS_Mocks_upto_z_525.vol.txt', vol_cone)
+x,y,z = read_LC_gal_pos('KiDS_Mocks_upto_z_525_LC.txt')
+ID_all, x_vol_all, y_vol_all, z_vol_all, x_denmin_all, y_denmin_all, z_denmin_all, zone_rad_all, dencon_all = read_vol_zone_txt('KiDS_Mocks_upto_z_525.vol.zone.txt')
+adj_dict = read_adj('KiDS_Mocks_upto_z_525.adj.txt')
+numpart_0_042, x_gal_0_042,y_gal_0_042,z_gal_0_042, x_halo_0_042,y_halo_0_042,z_halo_0_042, m200c_0_042, r200c_0_042, Rs_0_042, c_0_042 = read_HOD('L505Mpc_HOD+0.042.dat')
+numpart_0_130, x_gal_0_130,y_gal_0_130,z_gal_0_130, x_halo_0_130,y_halo_0_130,z_halo_0_130, m200c_0_130, r200c_0_130, Rs_0_130, c_0_130 = read_HOD('L505Mpc_HOD+0.130.dat')
 numpart_0_221, x_gal_0_221,y_gal_0_221,z_gal_0_221, x_halo_0_221,y_halo_0_221,z_halo_0_221, m200c_0_221, r200c_0_221, Rs_0_221, c_0_221 = read_HOD('L505Mpc_HOD+0.221.dat')
+numpart_0_317, x_gal_0_317,y_gal_0_317,z_gal_0_317, x_halo_0_317,y_halo_0_317,z_halo_0_317, m200c_0_317, r200c_0_317, Rs_0_317, c_0_317 = read_HOD('L505Mpc_HOD+0.317.dat')
+numpart_0_418, x_gal_0_418,y_gal_0_418,z_gal_0_418, x_halo_0_418,y_halo_0_418,z_halo_0_418, m200c_0_418, r200c_0_418, Rs_0_418, c_0_418 = read_HOD('L505Mpc_HOD+0.418.dat')
+numpart_0_525, x_gal_0_525,y_gal_0_525,z_gal_0_525, x_halo_0_525,y_halo_0_525,z_halo_0_525, m200c_0_525, r200c_0_525, Rs_0_525, c_0_525 = read_HOD('L505Mpc_HOD+0.525.dat')
 # kappa_fits = fits.open('../kappa_0.582_mass.dat_LOS500.fits')
 kappa_LoRes = fits.open('../kappa_0.582_mass.dat_LOS500_LoRes.fits')
 
@@ -101,6 +107,20 @@ for i in xrange(len(kappa)):
 
 # delta_map = read_delta_map('../0.221delta.dat_bicubic_LOS500.txt',pix_count)
 
+### COMBINE ALL XYZ OF GAL AND HALOS UP TO Z=0.525 AND MASS #############################################
+
+x_gal_upto_z_525 = hstack((x_gal_0_042,x_gal_0_130,x_gal_0_221,x_gal_0_317,x_gal_0_418,x_gal_0_525))
+y_gal_upto_z_525 = hstack((y_gal_0_042,y_gal_0_130,y_gal_0_221,y_gal_0_317,y_gal_0_418,y_gal_0_525))
+z_gal_upto_z_525 = hstack((z_gal_0_042,z_gal_0_130,z_gal_0_221,z_gal_0_317,z_gal_0_418,z_gal_0_525))
+
+x_halo_upto_z_525 = hstack((x_halo_0_042,x_halo_0_130,x_halo_0_221,x_halo_0_317,x_halo_0_418,x_halo_0_525))
+y_halo_upto_z_525 = hstack((y_halo_0_042,y_halo_0_130,y_halo_0_221,y_halo_0_317,y_halo_0_418,y_halo_0_525))
+z_halo_upto_z_525 = hstack((z_halo_0_042,z_halo_0_130,z_halo_0_221,z_halo_0_317,z_halo_0_418,z_halo_0_525))
+
+m200c_upto_z_525 = hstack((m200c_0_042,m200c_0_130,m200c_0_221,m200c_0_317,m200c_0_418,m200c_0_525))
+
+################################################################################################
+
 # Average density of survey
 tot_numden = numpart_vol/(vol_cone)
 
@@ -143,6 +163,26 @@ dencon = [dencon_all[i] for i in some_idx if i not in void_in_cloud_idx]
 void_idx = [void_idx_all[i] for i in some_idx if i not in void_in_cloud_idx]
 
 
+### FIND ZONES WITH RADIUS LARGER THAN 10 MPC
+zone_rad_cut = []
+x_vol_cut = []
+y_vol_cut = []
+z_vol_cut = []
+x_denmin_cut = []
+y_denmin_cut = []
+z_denmin_cut = []
+
+for i,t in enumerate(zone_rad):
+	if t > 10:
+		zone_rad_cut.append(zone_rad[i])
+		x_vol_cut.append(x_vol[i])
+		y_vol_cut.append(y_vol[i])
+		z_vol_cut.append(z_vol[i])
+		x_denmin_cut.append(x_denmin[i])
+		y_denmin_cut.append(y_denmin[i])
+		z_denmin_cut.append(z_denmin[i])
+
+
 ### FIND NUMBER OF HALOS WITH MASS OF MAX HALO AND THEIR INDEX 
 
 mass_idx = np.where(m200c_0_221==max(m200c_0_221))[0]
@@ -158,10 +198,11 @@ def mpc_to_pix(coord,z_coord):
 	pix_val = [(arctan(val/valz) + 5.*(pi/180.))*(pix_count/LC.theta)*(180./pi) for (val,valz) in zip(coord,z_coord)]
 	return pix_val
 
-def spherical_stk(zone_rad_stk,zone_rad_pix_stk,x_zone_stk,y_zone_stk,z_zone_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
+def spherical_stk(zone_rad_stk,x_zone_stk,y_zone_stk,z_zone_stk,numzone_stk):
+	delta_stk = [[] for i in xrange(numzone_stk)]
 	for r in range(0,(len(zone_rad_stk))):
 		# Create array from ~0 to 2 in order for it to be the same for all different sized zones
-		R_stk = np.linspace(0,2,20)
+		# R_stk = np.linspace(0,2,9)
 		# Array of volumes for each consecutive sphere for R values
 		V = ((4.*pi)/3.)*(R_stk*zone_rad_stk[r])**3
 
@@ -169,16 +210,10 @@ def spherical_stk(zone_rad_stk,zone_rad_pix_stk,x_zone_stk,y_zone_stk,z_zone_stk
 		ind_x_stk = find_nearest(x,x_zone_stk[r])
 		ind_y_stk = find_nearest(y,y_zone_stk[r])
 		ind_z_stk = find_nearest(z,z_zone_stk[r])
-
-		ind_x_pix = find_nearest(x_pix,x_pix_zone_stk[r])
-		ind_y_pix = find_nearest(y_pix,y_pix_zone_stk[r])
-		# ind_x_pix = find_nearest(x_pix_mpc,x_zone_stk[r])
-		# ind_y_pix = find_nearest(y_pix_mpc,y_zone_stk[r])
 			
 		count_stk = []
 		nden_stk = []
 		den_stk = []
-		kappa_stk = []
 
 		for n in range(0,len(R_stk)):
 			# This gives me a number density in each shell
@@ -195,16 +230,6 @@ def spherical_stk(zone_rad_stk,zone_rad_pix_stk,x_zone_stk,y_zone_stk,z_zone_stk
 				else:
 					den_temp1 = 0.0
 
-
-				# Kappa part of loop
-				# loc_tempk = pix_tree.query_ball_point([x_pix[ind_x_pix],y_pix[ind_y_pix]], R_stk[n]*zone_rad_pix_stk[r])
-				# count_tempk = len(loc_tempk)
-				# sum_kappa1 = sum([kappa[j][i] for j,i in zip(loc_tempk,loc_tempk)])
-				# if sum_kappa1 != 0:
-				# 	kappa_temp1 = (sum_kappa1/count_tempk)	
-				# else:
-				# 	kappa_temp1 = 0.0
-
 			else:
 				# Density part of loop
 				delta_r = (R_stk[n-1]*zone_rad_stk[r]) - (R_stk[n]*zone_rad_stk[r])
@@ -216,7 +241,8 @@ def spherical_stk(zone_rad_stk,zone_rad_pix_stk,x_zone_stk,y_zone_stk,z_zone_stk
 				count_temp1 = count_temp11-count_temp12
 				
 				# Index of particles in shell
-				shell_loc = [i for i in loc_temp11 if i not in loc_temp12]
+				# shell_loc = [i for i in loc_temp11 if i not in loc_temp12]
+				shell_loc = list(set(loc_temp11) - set(loc_temp12))
 
 				if len(shell_loc) != count_temp1:
 					print 'number of particles in shell doesnt add up!'
@@ -228,60 +254,46 @@ def spherical_stk(zone_rad_stk,zone_rad_pix_stk,x_zone_stk,y_zone_stk,z_zone_stk
 			 	else: 
 			 		den_temp1 = 0.0
 
-
-			 	# Kappa part of the loop
-			 # 	loc_tempk1 = pix_tree.query_ball_point([x_pix[ind_x_pix],y_pix[ind_y_pix]], R_stk[n]*zone_rad_pix_stk[r])
-			 # 	loc_tempk2 = pix_tree.query_ball_point([x_pix[ind_x_pix],y_pix[ind_y_pix]], R_stk[n-1]*zone_rad_pix_stk[r])
-
-				# count_tempk1 = len(loc_tempk1)
-				# count_tempk2 = len(loc_tempk2)
-				# count_tempk = count_tempk1-count_tempk2
-
-				# shell_loc_k = [i for i in loc_tempk1 if i not in loc_tempk2]
-				# sum_kappa1 = sum([kappa[j][i] for j,i in zip(shell_loc_k,shell_loc_k)])
-				# if sum_kappa1 != 0:
-				# 	kappa_temp1 = (sum_kappa1/count_tempk)	
-				# else:
-				# 	kappa_temp1 = 0.0
-
 			# Count of halos and number density in a each shell
 		 	count_stk.append(count_temp1)
 		 	# nden_stk.append(nden_temp1)
 		 	den_stk.append(den_temp1)
-		 	# kappa_stk.append(kappa_temp1)
+		 	delta_stk[r] = den_stk
+		
 		# Add elements of each zone's number count and number density per shell 
 		if r==0:
 			avg_count_temp = count_stk
 			# avg_nden_temp = nden_stk
 			avg_den_temp = den_stk
-			# avg_kappa_temp = kappa_stk
+			
 		else:
 			avg_count_temp = [a+b for a,b in zip(avg_count_temp,count_stk)]
 			# avg_nden_temp = [c+d for c,d in zip(avg_nden_temp,nden_stk)]
 			avg_den_temp = [c+d for c,d in zip(avg_den_temp,den_stk)]
-			# avg_kappa_temp = [e+f for e,f in zip(avg_kappa_temp,kappa_stk)]
+			
 
 		# Divide total counts and number densities in shells by number of voids
 		avg_cnt = np.array(avg_count_temp)/numzone_stk
 		# avg_nden = np.array(avg_nden_temp)/numzone_stk
 		avg_den = np.array(avg_den_temp)/numzone_stk
-		# avg_kappa = np.array(avg_kappa_temp)/numzone_stk
+		
 
-	return avg_cnt, avg_den#, avg_kappa #,avg_nden
+	return avg_cnt, avg_den, delta_stk#,avg_nden
 
 def sph_kappa_stk(zone_rad_pix_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
+	kappa_stk = [[] for i in xrange(numzone_stk)]
 	for r in range(0,(len(zone_rad_pix_stk))):
 		print r
 		# Create array from ~0 to 2 in order for it to be the same for all different sized zones
-		R_stk = np.linspace(0,2,20)
+		# R_stk = np.linspace(0,2,9)
 
 		# Get XY location of void on map projected at z where the kappa map is
 		ind_x_pix = find_nearest(x_pix,x_pix_zone_stk[r])
 		ind_y_pix = find_nearest(y_pix,y_pix_zone_stk[r])
 
 		# Create array of X and Y that spans 2x zone radius
-		x_zone_all = np.arange(x_pix[ind_x_pix]-2*int(zone_rad_pix_stk[r]),x_pix[ind_x_pix]+2*int(zone_rad_pix_stk[r]),1)
-		y_zone_all = np.arange(y_pix[ind_y_pix]-2*int(zone_rad_pix_stk[r]),y_pix[ind_y_pix]+2*int(zone_rad_pix_stk[r]),1)
+		x_zone_all = np.arange(x_pix[ind_x_pix]-3*int(zone_rad_pix_stk[r]),x_pix[ind_x_pix]+3*int(zone_rad_pix_stk[r]),1)
+		y_zone_all = np.arange(y_pix[ind_y_pix]-3*int(zone_rad_pix_stk[r]),y_pix[ind_y_pix]+3*int(zone_rad_pix_stk[r]),1)
 
 		x_zone = x_zone_all[np.where(np.logical_and(x_zone_all>=0, x_zone_all<=pix_count-1))[0]]
 		y_zone = y_zone_all[np.where(np.logical_and(y_zone_all>=0, y_zone_all<=pix_count-1))[0]]
@@ -334,23 +346,18 @@ def sph_kappa_stk(zone_rad_pix_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
 		
 		t_bin2 = time.time()
 		# print 'kappa bin done.  It took \t%g minutes' % ((t_bin2-t_bin1)/60.)
-
-		# Standard deviation of kappa values
-		kappa_std_dev = [np.std(k)/sqrt(len(k)) for k in kappa_sum_temp]
+		
 		# Mean of kappa value for each radial bin
-		kappa_stk = [np.mean(k) for k in kappa_sum_temp]
+		kappa_stk[r] = [np.mean(k) for k in kappa_sum_temp]
 
-		if r ==0:
-			avg_kappa_temp = kappa_stk
-			kappa_std_dev_temp = kappa_std_dev
-		else:
-			avg_kappa_temp = [e+f for e,f in zip(avg_kappa_temp,kappa_stk)]
-			kappa_std_dev_temp = [g+h for g,h in zip(kappa_std_dev_temp,kappa_std_dev)]
+		# if r ==0:
+		# 	avg_kappa_temp = kappa_stk[r]
+		# else:
+		# 	avg_kappa_temp = [e+f for e,f in zip(avg_kappa_temp,kappa_stk[r])]
 
-	kappa_std_dev = np.array(kappa_std_dev_temp)/numzone_stk
-	avg_kappa = np.array(avg_kappa_temp)/numzone_stk
+	# avg_kappa = [np.nanmean(np.array(avg_kappa_temp[i])) for i in xrange(len(R_stk))]
 
-	return avg_kappa, kappa_std_dev
+	return kappa_stk#avg_kappa, 
 
 def vol_avg_center(x_cell,y_cell,z_cell, x_adj,y_adj,z_adj, v_cell,v_adj):
 	# Gets volume weighted average location of a cell and it's adjacency
@@ -421,7 +428,7 @@ def boundary_bin(vm, dist, sort_idx):
 	
 	return bin_den, bin_dist, cnt
 
-def bin_zone(x_den,y_den,z_den, x_vol,y_vol,z_vol, x_pix_vol, y_pix_vol, zone_rad, dcon, zone_rad_pix, min_bin, max_bin):
+def bin_zone(x_den_val,y_den_val,z_den_val, x_vol_val,y_vol_val,z_vol_val, x_pix_vol_val, y_pix_vol_val, zn_rad, dcon, zn_rad_pix, min_bin, max_bin):
 	# This function returns in xyz centers (volume averaged and density), zone radius, density contrast, 
 	# and zone ID for particles in a specific range of zone radii
 
@@ -440,20 +447,20 @@ def bin_zone(x_den,y_den,z_den, x_vol,y_vol,z_vol, x_pix_vol, y_pix_vol, zone_ra
 
 
 	# Loop over all zones and retain xyz and radius for those that have given size
-	for i in range(0,len(ID)):
-		if zone_rad[i] > min_bin and zone_rad[i] <= max_bin:	
-			x_zone_stk.append(x_den[i])
-			y_zone_stk.append(y_den[i])
-			z_zone_stk.append(z_den[i])
-			x_vol_zone_stk.append(x_vol[i])
-			y_vol_zone_stk.append(y_vol[i])
-			z_vol_zone_stk.append(z_vol[i])
-			x_pix_zone_stk.append(x_pix_vol[i])
-			y_pix_zone_stk.append(y_pix_vol[i])
-			zone_rad_stk.append(zone_rad[i])
+	for i in range(0,len(zn_rad)):
+		if zn_rad[i] > min_bin and zn_rad[i] <= max_bin:	
+			x_zone_stk.append(x_den_val[i])
+			y_zone_stk.append(y_den_val[i])
+			z_zone_stk.append(z_den_val[i])
+			x_vol_zone_stk.append(x_vol_val[i])
+			y_vol_zone_stk.append(y_vol_val[i])
+			z_vol_zone_stk.append(z_vol_val[i])
+			x_pix_zone_stk.append(x_pix_vol_val[i])
+			y_pix_zone_stk.append(y_pix_vol_val[i])
+			zone_rad_stk.append(zn_rad[i])
 			zone_dencon_stk.append(dcon[i])
 			zn.append(zone_nonzero[i])
-			zone_rad_pix_stk.append(zone_rad_pix[i])
+			zone_rad_pix_stk.append(zn_rad_pix[i])
 
 	return x_zone_stk, y_zone_stk, z_zone_stk, x_vol_zone_stk, y_vol_zone_stk, z_vol_zone_stk, x_pix_zone_stk, y_pix_zone_stk, zone_rad_stk, zone_dencon_stk, zn, zone_rad_pix_stk
 
@@ -646,42 +653,58 @@ def boundary_stk(xvol, yvol, zvol, x_same_zone_bn, y_same_zone_bn, z_same_zone_b
 	
 
 ### GET XYZ OF HALOS IN PIXEL VALUES ###
-f = open('../0.221LightCone_halo.dat_LOS500.txt','r')
 
-x_halo_pix = []
-y_halo_pix = []
-z_halo_pix = []
-mass_halo_pix = []
-rad_halo_pix = []
+def read_halo_pix(filename):
 
-rows = f.readlines()
-for row in rows:
-	data = row.split()
-	x_halo_pix.append(data[0])
-	y_halo_pix.append(data[1])
-	z_halo_pix.append(data[2])
-	mass_halo_pix.append(data[3])
-	rad_halo_pix.append(data[3])
+	f = open(filename,'r')
 
-x_halo_pix = np.array(x_halo_pix).astype(np.float)
-y_halo_pix = np.array(y_halo_pix).astype(np.float)
-z_halo_pix = np.array(z_halo_pix).astype(np.float)
-mass_halo_pix = np.array(mass_halo_pix).astype(np.float)
+	x_halo_pix = []
+	y_halo_pix = []
+	z_halo_pix = []
+	mass_halo_pix = []
 
+	rows = f.readlines()
+	for row in rows:
+		data = row.split()
+		x_halo_pix.append(data[0])
+		y_halo_pix.append(data[1])
+		z_halo_pix.append(data[2])
+		mass_halo_pix.append(data[3])
+
+	x_halo_pix = np.array(x_halo_pix).astype(np.float)
+	y_halo_pix = np.array(y_halo_pix).astype(np.float)
+	z_halo_pix = np.array(z_halo_pix).astype(np.float)
+	mass_halo_pix = np.array(mass_halo_pix).astype(np.float)
+
+	return x_halo_pix,y_halo_pix,z_halo_pix,mass_halo_pix
+
+
+x_halo_pix_042,y_halo_pix_042,z_halo_pix_042,mass_halo_pix_042 = read_halo_pix('../0.042LightCone_halo.dat_LOS500.txt')
+x_halo_pix_130,y_halo_pix_130,z_halo_pix_130,mass_halo_pix_130 = read_halo_pix('../0.130LightCone_halo.dat_LOS500.txt')
+x_halo_pix_221,y_halo_pix_221,z_halo_pix_221,mass_halo_pix_221 = read_halo_pix('../0.221LightCone_halo.dat_LOS500.txt')
+x_halo_pix_317,y_halo_pix_317,z_halo_pix_317,mass_halo_pix_317 = read_halo_pix('../0.317LightCone_halo.dat_LOS500.txt')
+x_halo_pix_418,y_halo_pix_418,z_halo_pix_418,mass_halo_pix_418 = read_halo_pix('../0.418LightCone_halo.dat_LOS500.txt')
+x_halo_pix_525,y_halo_pix_525,z_halo_pix_525,mass_halo_pix_525 = read_halo_pix('../0.525LightCone_halo.dat_LOS500.txt')
+
+x_halo_pix_upto_z_525 = hstack((x_halo_pix_042,x_halo_pix_130,x_halo_pix_221,x_halo_pix_317,x_halo_pix_418,x_halo_pix_525))
+y_halo_pix_upto_z_525 = hstack((y_halo_pix_042,y_halo_pix_130,y_halo_pix_221,y_halo_pix_317,y_halo_pix_418,y_halo_pix_525))
+z_halo_pix_upto_z_525 = hstack((z_halo_pix_042,z_halo_pix_130,z_halo_pix_221,z_halo_pix_317,z_halo_pix_418,z_halo_pix_525))
+mass_halo_pix_upto_z_525 = hstack((mass_halo_pix_042,mass_halo_pix_130,mass_halo_pix_221,mass_halo_pix_317,mass_halo_pix_418,mass_halo_pix_525))
 
 
 ### GET XYZ OF TOP N MOST MASSIVE HALOS ###################################
 
+
 # Get indicies of most massive halos
-massive_halo_idx = np.argpartition(mass_halo_pix, -100)[-100:]
+massive_halo_idx = np.argpartition(mass_halo_pix_525, -100)[-100:]
 
 # Coordinates of most massive halos
-x_halo_massive = [x_halo_pix[valx] for valx in massive_halo_idx]
-y_halo_massive = [y_halo_pix[valy] for valy in massive_halo_idx]
+x_halo_massive = [x_halo_pix_525[valx] for valx in massive_halo_idx]
+y_halo_massive = [y_halo_pix_525[valy] for valy in massive_halo_idx]
 
 
 # Mass of most massive halos
-mass_halo_massive = [mass_halo_pix[mass] for mass in massive_halo_idx]
+mass_halo_massive = [mass_halo_pix_525[mass] for mass in massive_halo_idx]
 
 # Radii for halos is sent to be 1 Mpc at the center of the box ie whatever 1 Mpc at the middle
 # of the box is, is coverted to pixels and used as the radius for all halos
@@ -821,7 +844,6 @@ denminrad = np.int(find_nearest(x_slice_zone, x_denmin[arb_ind_void]))
 
 # Create tree for all particles
 halos = zip(np.array(x).ravel(), np.array(y).ravel(), np.array(z).ravel()) #makes x,y,z single arrays
-bounds = np.array([Lbox,Lbox,Lbox])
 tree = cKDTree(halos)
 
 # Create tree for xy coordinates given pixel values for kappa maps
@@ -830,6 +852,37 @@ pix_tree = cKDTree(pix_val)
 
 #############################################################################
 
+### FIND RADIUS AT WHICH THE BACKGROUND NUMBER DENSITY IS REACHED PER VOID ######################
+
+zone_rad_sph_den = np.zeros(len(x_vol_cut))
+numden_zone_rad = np.zeros(len(x_vol_cut))
+
+# Create a dictionary of distances from zone center to each particle 
+# dist = {}
+# dist = [tree.query([x_vol_cut[i],y_vol_cut[i],z_vol_cut[i]], k=int(numpart_vol))[0] for i in xrange(len(x_vol_cut))]
+
+# for i in xrange(len(x_vol_cut)):
+# 	print i
+# 	for d in dist[i]:
+# 		# Find how many particles are within radius d for each zone
+# 		part_loc = tree.query_ball_point([x_vol_cut[i], y_vol_cut[i], z_vol_cut[i]], d)
+
+# 		# Get number den at this particular radius
+# 		numden = len(part_loc)/(((4.*pi)/3.)*d**3.)
+
+# 		# If the numden is greater than or equal to the total numden, add radius to radius array
+# 		if numden >= 0.5*tot_numden:
+# 			numden_zone_rad[i] = numden
+# 			zone_rad_sph_den[i] = d
+# 			break
+# zero_idx = np.where(zone_rad_sph_den==0.)[0]
+# zone_rad_sph_den[zero_idx] = np.array(zone_rad)[zero_idx]
+
+# np.save('zone_rad_sph_0.5den_upto_z_525_cut', (zone_rad_sph_den,numden_zone_rad))
+zone_rad_sph_den, numden_zone_rad = np.load('zone_rad_sph_0.2den_upto_z_525_cut.npy')
+
+
+###################################################################################################
 
 #### CREATE PIXEL VALUES FOR XY COORDINATES OF VOID CENTERS ######################
 
@@ -841,13 +894,16 @@ deg_to_pix = 0.00129115558
 
 # Find x distance across sky for each z location and convert it to a 
 # pixel scale by dividing the num of pixels (7745) by each distance across sky
-pix_factor = [pix_count/(2*valz*tan(radians(5.))) for valz in z_vol]
+# pix_factor = [pix_count/(2*valz*tan(radians(5.))) for valz in z_vol]
+pix_factor = [pix_count/(2*valz*tan(radians(5.))) for valz in z_vol_cut]
 
 # Volume centers of void to pixel values
 # x_pix_vol = [(arctan(valx/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi) for (valx,valz) in zip(x_vol,z_vol)]
 # y_pix_vol = [(arctan(valy/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi) for (valy,valz) in zip(y_vol,z_vol)]
 x_pix_vol = [(valx*factor)+pix_count/2. for valx,factor in zip(x_vol,pix_factor)]
 y_pix_vol = [(valy*factor)+pix_count/2. for valy,factor in zip(y_vol,pix_factor)]
+x_pix_vol_cut = [(valx*factor)+pix_count/2. for valx,factor in zip(x_vol_cut,pix_factor)]
+y_pix_vol_cut = [(valy*factor)+pix_count/2. for valy,factor in zip(y_vol_cut,pix_factor)]
 
 # x_pix_vol = [(LC.theta/2.+degrees(arctan((valx-(DA_upper/2.))/D_box))/deg_to_pix) + 7745/2. for valx in x_vol]
 # y_pix_vol = [(LC.theta/2.+degrees(arctan((valy-(DA_upper/2.))/D_box))/deg_to_pix) + 7745/2. for valy in y_vol]
@@ -866,7 +922,8 @@ y_pix_vol = [(valy*factor)+pix_count/2. for valy,factor in zip(y_vol,pix_factor)
 
 # zone_rad_pix = [((arctan((valx+rad)/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi)) - ((arctan(valx/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi)) for (rad,valx,valz) in zip(zone_rad,x_vol,z_vol)]
 # zone_rad_pixy = [((arctan((valy+rad)/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi)) - ((arctan(valy/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi)) for (rad,valy,valz) in zip(zone_rad,y_vol,z_vol)]
-zone_rad_pix = [rad*factor for rad,factor in zip(zone_rad,pix_factor)]
+zone_rad_pix = [rad*factor for rad,factor in zip(zone_rad_sph_den,pix_factor)]
+zone_rad_pix_cut = [rad*factor for rad,factor in zip(zone_rad_cut,pix_factor)]
 
 ### CREATE SPHERICAL DENSITY PROFILE FOR A SINGLE ZONE ###############################
 
@@ -912,7 +969,11 @@ for i in range(0,len(R_shell)):
 ##########################################################################################################################################
 
 # Split zones into bins from 0 to maximum radius of each zone
-zone_bins = np.linspace(0,max(zone_rad),6)
+# zone_bins = np.linspace(0,max(zone_rad_cut),2)
+zone_bins = np.linspace(0,max(zone_rad_sph_den),2)
+
+# Range of spherical shells is from 0 to 2*R_eff of each zone in bin
+R_stk = np.linspace(0,3,15)
 
 # Create dictionary to store values for each output from the binning procedure
 x_den_stk = {}
@@ -928,14 +989,18 @@ zone_rad_pix_stk = {}
 zone_dencon_stk = {}
 zn_stk = {}
 num_zn_stk = {}
-avg_kappa_std_dev = {}
+avg_kappa_err = {}
+avg_delta_err = {}
+delta_per_void = {}
+kappa_per_void = {}
+
 
 
 for i in range(0,len(zone_bins)-1):
 	# Loops over all the bins and puts xyz (den and vol), zone radii, zone dencon, num of zones in bin, and zone ID into dictionary
 	# Note that values of the dictionary are referred to as the upper value of the bin
 	# eg there will be no '0' entry, but will be a 'max(zone_radius)' entry
-	x_den_stk[i],y_den_stk[i],z_den_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],zone_rad_stk[i],zone_dencon_stk[i],zn_stk[i],zone_rad_pix_stk[i] = bin_zone(x_denmin,y_denmin,z_denmin, x_vol,y_vol,z_vol, x_pix_vol, y_pix_vol, zone_rad, dencon, zone_rad_pix, zone_bins[i], zone_bins[i+1])
+	x_den_stk[i],y_den_stk[i],z_den_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],zone_rad_stk[i],zone_dencon_stk[i],zn_stk[i],zone_rad_pix_stk[i] = bin_zone(x_denmin_cut,y_denmin_cut,z_denmin_cut, x_vol_cut,y_vol_cut,z_vol_cut, x_pix_vol_cut, y_pix_vol_cut, zone_rad_sph_den, dencon, zone_rad_pix, zone_bins[i], zone_bins[i+1])
 	num_zn_stk[i] = len(zone_rad_stk[i])
 
 
@@ -947,23 +1012,30 @@ avg_kappa_sph = {}
 # Get avg counts and nden for each shell in each bin
 for i in range(0,len(zone_bins)-1):
 	if zone_rad_stk[i] != []:
-		# avg_count_sph[i], avg_den_sph[i] = spherical_stk(zone_rad_stk[i],zone_rad_pix_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
-		avg_kappa_sph[i], avg_kappa_std_dev[i] = sph_kappa_stk(zone_rad_pix_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
+		
+		avg_count_sph[i], avg_den_sph[i], delta_per_void[i] = spherical_stk(zone_rad_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],num_zn_stk[i])
+		# avg_kappa_sph[i], kappa_per_void[i] = sph_kappa_stk(zone_rad_pix_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
+		
+		kappa_per_void[i] = sph_kappa_stk(zone_rad_pix_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
+		avg_kappa_sph[i] = [nanmean([(array(kappa_per_void[i])[k,j]) for k in xrange(len(kappa_per_void[i]))]) for j in xrange(len(R_stk))]
 
-		# np.save('sph_kappa_Mocks_%d' % zone_bins[i+1], (avg_kappa_sph[i], avg_kappa_std_dev[i]))
+		
+		# Error on mean of kappa and delta calculaion
+		avg_kappa_err[i] = [sqrt(nanmean([abs(array(kappa_per_void[i])[k,j]-avg_kappa_sph[i][j])**2 for k in xrange(len(kappa_per_void[i]))]))/sqrt(len(kappa_per_void[i])) for j in xrange(len(R_stk))]
+		avg_delta_err[i] = [sqrt(mean([abs(array(delta_per_void[i])[k,j]-avg_den_sph[i][j])**2 for k in xrange(len(delta_per_void[i]))]))/sqrt(len(delta_per_void[i])) for j in xrange(len(R_stk))]
+		
+# avg_kappa_sph_all, avg_kappa_err_all = sph_kappa_stk(zone_rad_pix_cut,x_pix_vol_cut,y_pix_vol_cut,len(zone_rad_pix_cut))
+
+		# np.save('sph_kappa_Mocks_%d' % zone_bins[i+1], (avg_kappa_sph[i], avg_kappa_err[i]))
 
 # Kappa profile for halos
-# avg_kappa_sph[0], avg_kappa_std_dev[0] = sph_kappa_stk(rad_halo_massive,x_halo_massive,y_halo_massive,len(x_halo_massive))
-
-
-# Range of spherical shells is from 0 to 2*R_eff of each zone in bin
-R_stk = np.linspace(0,2,20)
+# avg_kappa_sph_halo, avg_kappa_err_halo = sph_kappa_stk(rad_halo_massive,x_halo_massive,y_halo_massive,len(x_halo_massive))
 
 
 # Load spherical avg counts and avg nden
 # for i in range(0,len(zone_bins)-1):
 	# if zone_bins[i+1] < 10:
-		# avg_kappa_sph[i], avg_kappa_std_dev[i] = np.load('sph_kappa_Mocks_%d.npy' % zone_bins[i+1])
+		# avg_kappa_sph[i], avg_kappa_err[i] = np.load('sph_kappa_Mocks_%d.npy' % zone_bins[i+1])
 		# avg_count_sph[i], avg_den_sph[i] = np.load('sph_count_nden_Mocks_0_221_noncube_0%d.npy' % zone_bins[i+1])	
 	# else:
 # 		avg_count_sph[i], avg_den_sph[i] = np.load('sph_count_nden_Mocks_0_221_noncube_%d.npy' % zone_bins[i+1])
@@ -1139,12 +1211,13 @@ print 'time of code: \t%g minutes' % ((t_end-t_begin)/60.)
 
 # fig1 = plt.figure(figsize=(10,8))
 # fig2 = plt.figure(figsize=(10,8))
-# fig3 = plt.figure(figsize=(10,8))
+fig3 = plt.figure(figsize=(10,8))
 # fig4 = plt.figure(figsize=(10,8))
 # fig5 = plt.figure(figsize=(10,8))
 # fig6 = plt.figure(figsize=(10,8))
 # fig7 = plt.figure(figsize=(10,8))
 fig8 = plt.figure(figsize=(10,8))
+# fig9 = plt.figure(figsize=(10,8))
 
 # Create ability to cycle through linestyles
 lines = ["-","--","-.",":"]
@@ -1200,25 +1273,27 @@ linecycler = cycle(lines)
 
 
 # Create density contrast vs R_v for stacked voids
-# label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
-# ax3 = fig3.add_subplot(111)
-# #ax3.set_xlim(0,33)
-# # ax3.set_ylim(0,2)
-# ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
-# ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
-# for i in range(0,len(zone_bins)-1):
-# 	# if zone_rad_stk[i] != []:
-# 	ax3.plot(R_stk, np.array(avg_den_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = next(colorcycler))
-# ax3.spines['top'].set_linewidth(2.3)
-# ax3.spines['left'].set_linewidth(2.3)
-# ax3.spines['right'].set_linewidth(2.3)
-# ax3.spines['bottom'].set_linewidth(2.3)
-# for tick in ax3.xaxis.get_major_ticks():
-#     tick.label.set_fontsize(27)
-# for tick in ax3.yaxis.get_major_ticks():
-#     tick.label.set_fontsize(27)
-# ax3.legend(loc='best', fancybox = True, shadow = True, ncol=2)
-# fig3.savefig('KiDS_Mocks_0_221_spherical_prof_stk_bin', format='pdf')
+label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
+ax3 = fig3.add_subplot(111)
+#ax3.set_xlim(0,33)
+ax3.set_ylim(0,2)
+ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
+ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
+for i in range(0,len(zone_bins)-1):
+	if zone_rad_stk[i] != []:
+		clr = next(colorcycler)
+		ax3.plot(R_stk, np.array(avg_den_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
+		ax3.errorbar(R_stk, np.array(avg_den_sph[i]), yerr=np.array(avg_delta_err[i]), fmt='x', color = clr)
+ax3.spines['top'].set_linewidth(2.3)
+ax3.spines['left'].set_linewidth(2.3)
+ax3.spines['right'].set_linewidth(2.3)
+ax3.spines['bottom'].set_linewidth(2.3)
+for tick in ax3.xaxis.get_major_ticks():
+    tick.label.set_fontsize(27)
+for tick in ax3.yaxis.get_major_ticks():
+    tick.label.set_fontsize(27)
+ax3.legend(loc='best', fancybox = True, shadow = True, ncol=2)
+# fig3.savefig('KiDS_Mocks_upto_z_525_spherical_prof_stk_bin', format='pdf')
 
 
 # # Create density contrast vs R_v for stacked voids with vol avg center
@@ -1312,8 +1387,12 @@ ax8 = fig8.add_subplot(111)
 ax8.set_xlabel(r'$\mathrm{r/R_{zone}}$')
 ax8.set_ylabel(r'$\mathrm{\kappa}$')
 for i in range(0,len(zone_bins)-1):
-	ax8.plot(R_stk, np.array(avg_kappa_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = next(colorcycler))
-	ax8.errorbar(R_stk, np.array(avg_kappa_sph[i]), yerr=np.array(avg_kappa_std_dev[i]), fmt='x', color = next(colorcycler))
+	if zone_rad_stk[i] != []:
+		clr = next(colorcycler)
+		ax8.plot(R_stk, np.array(avg_kappa_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
+		ax8.errorbar(R_stk, np.array(avg_kappa_sph[i]), yerr=np.array(avg_kappa_err[i]), fmt='x', color = clr)
+# ax8.plot(R_stk, np.array(avg_kappa_sph_all), linewidth=3)
+# ax8.errorbar(R_stk, np.array(avg_kappa_sph_all), yerr=np.array(avg_kappa_err_all), fmt='x')
 ax8.spines['top'].set_linewidth(2.3)
 ax8.spines['left'].set_linewidth(2.3)
 ax8.spines['right'].set_linewidth(2.3)
@@ -1323,7 +1402,29 @@ for tick in ax8.xaxis.get_major_ticks():
 for tick in ax8.yaxis.get_major_ticks():
     tick.label.set_fontsize(27)
 ax8.legend(loc='best', fancybox = True, shadow = True, ncol = 2)
-# fig8.savefig('KiDS_Mocks_0_221_kappa_sph_err', format='pdf')
+# fig8.savefig('KiDS_Mocks_upto_z_525_kappa_sph_LoRes', format='pdf')
+
+# Create kappa vs R_v for stacked halos
+# ax9 = fig9.add_subplot(111)
+# # ax9.set_xlim(0,33)
+# # ax9.set_ylim(0,2)
+# ax9.set_xlabel(r'$\mathrm{r/R_{zone}}$')
+# ax9.set_ylabel(r'$\mathrm{\kappa}$')
+# clr = next(colorcycler)
+# ax9.plot(R_stk, np.array(avg_kappa_sph_halo), linewidth=3, linestyle = next(linecycler), color = clr)
+# ax9.errorbar(R_stk, np.array(avg_kappa_sph_halo), yerr=np.array(avg_kappa_err_halo), fmt='x', color = clr)
+# ax9.spines['top'].set_linewidth(2.3)
+# ax9.spines['left'].set_linewidth(2.3)
+# ax9.spines['right'].set_linewidth(2.3)
+# ax9.spines['bottom'].set_linewidth(2.3)
+# ax9.set_yscale('log')
+# ax9.set_xscale('log')
+# for tick in ax9.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax9.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# ax9.legend(loc='best', fancybox = True, shadow = True, ncol=2)
+# fig9.savefig('KiDS_Mocks_upto_z_525_spherical_prof_stk_bin', format='pdf')
 
 
 plt.show()
