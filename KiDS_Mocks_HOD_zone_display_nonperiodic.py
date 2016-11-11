@@ -12,6 +12,9 @@ import time
 from itertools import cycle
 from Cosmology_class import *
 from astropy.io import fits
+import matplotlib.colors as mclr
+from scipy.integrate import quad
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 font = {'family' : 'serif', 'serif' : ['Times'], 'size' : '35'}
@@ -31,16 +34,44 @@ pix_count = 1549#7745#
 
 # WMAP9+SN+BAO cosmology
 LC.H0 = 68.98 #km s^{-1} Mpc^{-1} 
+h = LC.H0/100.
+c = 2.99792E5 #km/s
 LC.omega_m = 0.2905
 LC.omega_L = 0.7095
 LC.z_box = 0.525
+z_box_317 = 0.317
 LC.Lbox_full = 505. #Mpc/h this is the size of the simulation box that the light cone was in, but only half of it is used so it's 252.5 Mpc/h
 LC.theta = 10. #degrees on sky of each mock
 LC.Lcube = 265.
 nc = 3072.
+D_H = c/LC.H0 #Hubble distance in units of Mpc
+
+def comoving_dist(z_box,omega_m,omega_L,H0,h,c,theta,Lbox):
+	### FINDING COMOVING DISTANCE TO LOWER, MIDDLE, AND UPPER LIGHTCONE IN Z 
+	### AND FINDING UPPER AND LOWER ANGULAR DIAMETER DISTANCE FOR X AND Y
+
+	# Find comoving distance to center of box and then to the z_max and z_min in order to find x_min(y_min)
+	# and x_max(y_max) at z_min and z_max
+	def integrand(z):
+	    return (1./sqrt(omega_m*(1+z)**3 + omega_L))
+
+	ans, err = quad(integrand, 0, z_box)
+	D_box = h*D_H*ans #This is the comoving distance to the 'middle' of the light cone in units of Mpc/h
+
+	# Distance to 'lower' and 'upper' section of the light cone
+	# Lbox is divided by 4 because the lightcone already is taking up Lbox/2
+	D_low = D_box - Lbox/4. 
+	D_upper = D_box + Lbox/4. 
+
+	# Angular distance of 'lower' and 'upper' section of lightcone
+	DA_low = 2.*D_low*tan(radians(theta/2.))
+	DA_upper = 2.*D_upper*tan(radians(theta/2.))
+
+	return D_box, D_low, D_upper, DA_low, DA_upper
 
 # Get comoving distances of middle of box, lower end, and upper end as well as angular distances of lower and upper edge of cone
 D_box, D_low, D_upper, DA_low, DA_upper = LC.comoving_dist()
+D_box_317, D_low_317, D_upper_317, DA_low_317, DA_upper_317 = comoving_dist(z_box_317,LC.omega_m,LC.omega_L,LC.H0,h,c,LC.theta,LC.Lbox_full)
 
 ### VOLUMES ###############################################################
 
@@ -65,6 +96,7 @@ numpart_0_418, x_gal_0_418,y_gal_0_418,z_gal_0_418, x_halo_0_418,y_halo_0_418,z_
 numpart_0_525, x_gal_0_525,y_gal_0_525,z_gal_0_525, x_halo_0_525,y_halo_0_525,z_halo_0_525, m200c_0_525, r200c_0_525, Rs_0_525, c_0_525 = read_HOD('L505Mpc_HOD+0.525.dat')
 # kappa_fits = fits.open('../kappa_0.582_mass.dat_LOS500.fits')
 kappa_LoRes = fits.open('../kappa_0.582_mass.dat_LOS500_LoRes.fits')
+# xgal_kappa, ygal_kappa, gal_kappa = loadtxt('Source_galaxies_for_kappa_z_0_582.txt', unpack=True)
 
 ### DOWNGRADE KAPPA RESOLUTION ##############################################
 
@@ -101,6 +133,9 @@ kappa_dict = {}
 for i in xrange(len(kappa)):
 	kappa_dict[i] = {}
 	kappa_dict[i] = kappa[i]
+
+# Create dictionary of random kappa values pulled from a guassian distribution
+kappa_rand = np.random.normal(0, (0.3)**2, (pix_count,pix_count))
 
 
 ################################################################################################
@@ -171,9 +206,10 @@ z_vol_cut = []
 x_denmin_cut = []
 y_denmin_cut = []
 z_denmin_cut = []
+void_idx_cut = []
 
 for i,t in enumerate(zone_rad):
-	if t > 10:
+	if t > 10.:
 		zone_rad_cut.append(zone_rad[i])
 		x_vol_cut.append(x_vol[i])
 		y_vol_cut.append(y_vol[i])
@@ -181,13 +217,29 @@ for i,t in enumerate(zone_rad):
 		x_denmin_cut.append(x_denmin[i])
 		y_denmin_cut.append(y_denmin[i])
 		z_denmin_cut.append(z_denmin[i])
+		void_idx_cut.append(void_idx[i])
 
+# f = open('LOS500_vol_avg_void_centers.txt', 'w')
+# for i in xrange(len(x_vol_cut)):
+# 	f.write("{} {} {}\n".format(x_vol_cut[i],y_vol_cut[i],z_vol_cut[i]))
+# f.close()
 
 ### FIND NUMBER OF HALOS WITH MASS OF MAX HALO AND THEIR INDEX 
 
 mass_idx = np.where(m200c_0_221==max(m200c_0_221))[0]
 
 ##############################################################
+
+def interpolate2D(X, Y, grid): 
+	# linear 2D interpolation
+	Xi = X.astype(np.int)
+	Yi = Y.astype(np.int) # these round down to integer
+
+	VAL_XYlo = grid[Yi, Xi] + (X - Xi)*( grid[Yi, Xi+1] - grid[Yi, Xi] )
+	VAL_XYhi = grid[Yi+1,Xi] + (X - Xi)*( grid[Yi+1,Xi+1] - grid[Yi+1, Xi] )
+	VAL_XY = VAL_XYlo + (Y - Yi)*( VAL_XYhi - VAL_XYlo )  
+	
+	return VAL_XY
 
 def kappa_pix_to_mpc(coord,D_upper):
 	mpc_val = [D_upper*tan((value*(LC.theta/pix_count)*(pi/180.))-5*(pi/180.)) for value in coord]
@@ -280,27 +332,29 @@ def spherical_stk(zone_rad_stk,x_zone_stk,y_zone_stk,z_zone_stk,numzone_stk):
 
 	return avg_cnt, avg_den, delta_stk#,avg_nden
 
-def sph_kappa_stk(zone_rad_pix_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
+def sph_kappa_stk(zn_rad_pix_stk,xpix_zone_stk,ypix_zone_stk,numzone_stk):
 	kappa_stk = [[] for i in xrange(numzone_stk)]
-	for r in range(0,(len(zone_rad_pix_stk))):
+	w = [[] for i in xrange(numzone_stk)]
+	for r in range(0,(len(zn_rad_pix_stk))):
 		print r
 		# Create array from ~0 to 2 in order for it to be the same for all different sized zones
 		# R_stk = np.linspace(0,2,9)
 
 		# Get XY location of void on map projected at z where the kappa map is
-		ind_x_pix = find_nearest(x_pix,x_pix_zone_stk[r])
-		ind_y_pix = find_nearest(y_pix,y_pix_zone_stk[r])
+		ind_x_pix = find_nearest(x_pix,xpix_zone_stk[r])
+		ind_y_pix = find_nearest(y_pix,ypix_zone_stk[r])
 
 		# Create array of X and Y that spans 2x zone radius
-		x_zone_all = np.arange(x_pix[ind_x_pix]-3*int(zone_rad_pix_stk[r]),x_pix[ind_x_pix]+3*int(zone_rad_pix_stk[r]),1)
-		y_zone_all = np.arange(y_pix[ind_y_pix]-3*int(zone_rad_pix_stk[r]),y_pix[ind_y_pix]+3*int(zone_rad_pix_stk[r]),1)
+		# x_zone_all = np.arange(x_pix[ind_x_pix]-R_mult*int(zn_rad_pix_stk[r]),x_pix[ind_x_pix]+R_mult*int(zn_rad_pix_stk[r]),1)
+		# y_zone_all = np.arange(y_pix[ind_y_pix]-R_mult*int(zn_rad_pix_stk[r]),y_pix[ind_y_pix]+R_mult*int(zn_rad_pix_stk[r]),1)
 
-		x_zone = x_zone_all[np.where(np.logical_and(x_zone_all>=0, x_zone_all<=pix_count-1))[0]]
-		y_zone = y_zone_all[np.where(np.logical_and(y_zone_all>=0, y_zone_all<=pix_count-1))[0]]
+		# # Non-grid values
+		x_zone_all = np.arange(x_pix[ind_x_pix]-R_mult*zn_rad_pix_stk[r],x_pix[ind_x_pix]+R_mult*zn_rad_pix_stk[r],1)
+		y_zone_all = np.arange(y_pix[ind_y_pix]-R_mult*zn_rad_pix_stk[r],y_pix[ind_y_pix]+R_mult*zn_rad_pix_stk[r],1)
 
-		# print 'len x zone all', len(x_zone_all)
-		# print 'len y zone all', len(y_zone_all)
-		# print 
+		# The '-2' on pix_count is to account for the interpolation that goes to X(Y) + 1 for indexing purposes
+		x_zone = x_zone_all[np.where(np.logical_and(x_zone_all>=0, x_zone_all<=pix_count-2))[0]]
+		y_zone = y_zone_all[np.where(np.logical_and(y_zone_all>=0, y_zone_all<=pix_count-2))[0]]
 
 
 		# print 'dist start'
@@ -310,9 +364,12 @@ def sph_kappa_stk(zone_rad_pix_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
 		# dist = [[sqrt((i-x_pix[ind_x_pix])**2. + (j-y_pix[ind_y_pix])**2.) for j in y_zone] for i in x_zone]
 		dist = sqrt((x_zone[:,None]-x_pix[ind_x_pix])**2. + (y_zone[None,:]-y_pix[ind_y_pix])**2.)
 		t_dist2 = time.time()
+	
+	
 		# print 'dist done.  It took \t%g minutes' % ((t_dist2-t_dist1)/60.) 
 
 		# print ''
+
 
 		# print 'kappa start'
 		t_kappa1 = time.time()
@@ -320,7 +377,8 @@ def sph_kappa_stk(zone_rad_pix_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
 		kappa_seg = {}
 		for i,t in enumerate(x_zone):
 			# Need to put 'y' value first in 2D arrays
-			kappa_seg[i] = [kappa_dict[j][t] for j in y_zone]
+			# kappa_seg[i] = [kappa_dict[j][t] for j in y_zone]
+			kappa_seg[i] = interpolate2D(t,y_zone,kappa)
 		# kappa_seg = [[kappa_dict[i][j] for j in y_zone] for i in x_zone]
 		t_kappa2 = time.time()
 		# print 'kappa done.  It took \t%g minutes' % ((t_kappa2-t_kappa1)/60.)
@@ -329,8 +387,8 @@ def sph_kappa_stk(zone_rad_pix_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
 		# Get index of the bin where each distance would fall if it were sorted
 		dist_sort_idx = {}
 		for j in xrange(len(dist)):
-			dist_sort_idx[j] = np.searchsorted(R_stk*zone_rad_pix_stk[r], dist[j])
-		# dist_sort_idx = [np.searchsorted(R_stk*zone_rad_pix_stk[r], dist[j]) for j in xrange(len(dist))]
+			dist_sort_idx[j] = np.searchsorted(R_stk*zn_rad_pix_stk[r], dist[j])
+		# dist_sort_idx = [np.searchsorted(R_stk*zn_rad_pix_stk[r], dist[j]) for j in xrange(len(dist))]
 		t_sort2 = time.time()
 		# print 'dist sort done.  It took \t%g minutes' % ((t_sort2-t_sort1)/60.)
 		# Sort the values of the kappa segment based on the sorting of the distances
@@ -338,17 +396,21 @@ def sph_kappa_stk(zone_rad_pix_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
 		
 
 		k_rav = np.array(kappa_seg.values()).ravel()
+
 		dist_idx_rav = np.array(dist_sort_idx.values()).ravel()
+		
 		t_bin1 = time.time()
 		# Put arrays of kappa into radii bins
-		kappa_sum_temp = [k_rav[np.where(dist_idx_rav==i)[0]] for i in xrange(len(R_stk))]
-		# print kappa_sum_temp
-		
+		kappa_sum_temp = [k_rav[np.where(dist_idx_rav==i)[0]] for i in xrange(len(R_stk))]# if k_rav[np.where(dist_idx_rav==i)[0]] not []]
+
 		t_bin2 = time.time()
 		# print 'kappa bin done.  It took \t%g minutes' % ((t_bin2-t_bin1)/60.)
 		
 		# Mean of kappa value for each radial bin
-		kappa_stk[r] = [np.mean(k) for k in kappa_sum_temp]
+		kappa_stk[r] = [nanmean(k) for k in kappa_sum_temp]
+		w[r] = [1 if isfinite(kappa_stk[r][i]) else 0 for i in xrange(len(kappa_stk[r]))]
+
+		
 
 		# if r ==0:
 		# 	avg_kappa_temp = kappa_stk[r]
@@ -357,7 +419,11 @@ def sph_kappa_stk(zone_rad_pix_stk,x_pix_zone_stk,y_pix_zone_stk,numzone_stk):
 
 	# avg_kappa = [np.nanmean(np.array(avg_kappa_temp[i])) for i in xrange(len(R_stk))]
 
-	return kappa_stk#avg_kappa, 
+	return kappa_stk#, w
+
+# def sph_kappa_stk(zn_rad_pix_stk,xpix_zone_stk,ypix_zone_stk,numzone_stk):
+	# for r in range(0,(len(zn_rad_pix_stk))):
+	# 	print r
 
 def vol_avg_center(x_cell,y_cell,z_cell, x_adj,y_adj,z_adj, v_cell,v_adj):
 	# Gets volume weighted average location of a cell and it's adjacency
@@ -440,8 +506,8 @@ def bin_zone(x_den_val,y_den_val,z_den_val, x_vol_val,y_vol_val,z_vol_val, x_pix
 	z_vol_zone_stk = []
 	x_pix_zone_stk = []
 	y_pix_zone_stk = []
-	zone_rad_stk = []
-	zone_rad_pix_stk = []
+	zn_rad_stk = []
+	zn_rad_pix_stk = []
 	zone_dencon_stk = []
 	zn = []
 
@@ -457,12 +523,12 @@ def bin_zone(x_den_val,y_den_val,z_den_val, x_vol_val,y_vol_val,z_vol_val, x_pix
 			z_vol_zone_stk.append(z_vol_val[i])
 			x_pix_zone_stk.append(x_pix_vol_val[i])
 			y_pix_zone_stk.append(y_pix_vol_val[i])
-			zone_rad_stk.append(zn_rad[i])
+			zn_rad_stk.append(zn_rad[i])
 			zone_dencon_stk.append(dcon[i])
 			zn.append(zone_nonzero[i])
-			zone_rad_pix_stk.append(zn_rad_pix[i])
+			zn_rad_pix_stk.append(zn_rad_pix[i])
 
-	return x_zone_stk, y_zone_stk, z_zone_stk, x_vol_zone_stk, y_vol_zone_stk, z_vol_zone_stk, x_pix_zone_stk, y_pix_zone_stk, zone_rad_stk, zone_dencon_stk, zn, zone_rad_pix_stk
+	return x_zone_stk, y_zone_stk, z_zone_stk, x_vol_zone_stk, y_vol_zone_stk, z_vol_zone_stk, x_pix_zone_stk, y_pix_zone_stk, zn_rad_stk, zone_dencon_stk, zn, zn_rad_pix_stk
 
 def adj_particles(same_zone_adj_bn,zn):
 	# This function takes in an array of adjacencies for a zone and 
@@ -510,9 +576,9 @@ def adj_particles(same_zone_adj_bn,zn):
 				adj_cell_vol_temp_tot.append(vol[b])
 
 				# Get ID of cell thats on a boundary
-				cell_on_boundary_temp_tot.append(same_zone_id_bn[0][a])
+				cell_on_boundary_temp_tot.append(same_zone_id_bn[a])
 
-			if zone_nonzero[b] != zn and z[b] <= slice_max/mult and z[b] >= slice_min/mult:
+			if zone_nonzero[b] != zn and z[b] <= slice_max_bn[a] and z[b] >= slice_min_bn[a]:
 				# xyz in order for plots
 				x_non_zone_adj.append(x[b])
 				y_non_zone_adj.append(y[b])
@@ -527,7 +593,7 @@ def adj_particles(same_zone_adj_bn,zn):
 				adj_cell_vol_temp.append(vol[b])
 
 				# Get ID of cell thats on a boundary
-				cell_on_boundary_temp.append(same_zone_id_bn[0][a])
+				cell_on_boundary_temp.append(same_zone_id_bn[a])
 				
 		# Gets array of arrays which contain volumes for each adjacent cell not part of zone for each particle in same_zone_adj
 		if adj_cell_vol_temp != []:
@@ -561,8 +627,9 @@ def boundary_stk(xvol, yvol, zvol, x_same_zone_bn, y_same_zone_bn, z_same_zone_b
 	y_part = []
 	z_part = []
 
+	zn_idx = np.where(np.array(void_idx_cut)==zn)[0]
 	# Find particles within rad_val of zone radius that are not in zone
-	idx = tree.query_ball_point([x_vol[zn],y_vol[zn],z_vol[zn]],rad_val)
+	idx = tree.query_ball_point([x_vol_cut[zn_idx],y_vol_cut[zn_idx],z_vol_cut[zn_idx]],rad_val)
 
 	new_idx = [] # index of particles not in zone, but within 2*R_eff of zone
 	for i in idx:
@@ -589,7 +656,7 @@ def boundary_stk(xvol, yvol, zvol, x_same_zone_bn, y_same_zone_bn, z_same_zone_b
 
 	# Calculate density for each cell in the zone
 	# den_same_zone_bn = [(1./volume) for volume in vol_same_zone_bn[0]]
-	vol_same_zone_bn = [(volume) for volume in vol_same_zone_bn[0]]
+	# vol_same_zone_bn = [(volume) for volume in vol_same_zone_bn[0]]
 
 	# Calculate density for each particle 
 	vol_non_zn_part = []
@@ -694,21 +761,23 @@ mass_halo_pix_upto_z_525 = hstack((mass_halo_pix_042,mass_halo_pix_130,mass_halo
 
 ### GET XYZ OF TOP N MOST MASSIVE HALOS ###################################
 
-
 # Get indicies of most massive halos
-massive_halo_idx = np.argpartition(mass_halo_pix_525, -100)[-100:]
+massive_halo_idx = np.argpartition(mass_halo_pix_upto_z_525, -500)[-500:]
 
 # Coordinates of most massive halos
-x_halo_massive = [x_halo_pix_525[valx] for valx in massive_halo_idx]
-y_halo_massive = [y_halo_pix_525[valy] for valy in massive_halo_idx]
+x_halo_massive = [x_halo_pix_upto_z_525[valx]/5. for valx in massive_halo_idx]
+y_halo_massive = [y_halo_pix_upto_z_525[valy]/5. for valy in massive_halo_idx]
 
 
 # Mass of most massive halos
-mass_halo_massive = [mass_halo_pix_525[mass] for mass in massive_halo_idx]
+mass_halo_massive = [mass_halo_pix_upto_z_525[mass] for mass in massive_halo_idx]
 
 # Radii for halos is sent to be 1 Mpc at the center of the box ie whatever 1 Mpc at the middle
 # of the box is, is coverted to pixels and used as the radius for all halos
-rad_halo_massive = np.ones(len(x_halo_massive))*(pix_count/(2*D_box*tan(radians(5.))))
+rad_halo_massive = np.ones(len(x_halo_massive))*15#(pix_count/(2*D_box_317*tan(radians(5.))))
+
+#############################################################################
+
 
 #############################################################################
 
@@ -794,6 +863,25 @@ for val in same_zone_id:
 	# Gets array of indices of adjacent particles to each particle in a specific zone
 	same_zone_adj.append(adj_dict[val])
 
+### CREATE SLICE IN THE Y DIMENSION ########################################################
+
+# Indices of slices in the y direction
+yslice_gal_loc = np.where(np.logical_and(array(y)>=-6., array(y)<=0.))[0]
+xslice = array(x)[yslice_gal_loc]
+zslice = array(z)[yslice_gal_loc]
+
+# Indices of void centers that fall into this slice
+yslice_zone_loc = np.where(np.logical_and(array(y_vol_cut)>=-6., array(y_vol_cut)<=0.))[0]
+yslice_zone_rad = array(zone_rad_cut)[yslice_zone_loc]
+
+xslice_zone = array(x_vol_cut)[yslice_zone_loc]
+zslice_zone = array(z_vol_cut)[yslice_zone_loc]
+
+# Find locations most massive zone in this slice
+yslice_zone_lg = np.argpartition(yslice_zone_rad, -5)[-5:]
+
+
+
 ### CREATE SLICE IN THE Z DIMENSION ########################################################
 
 x_slice = []
@@ -805,7 +893,7 @@ y_slice_zone = []
 slice_zone_idx = []
 r_eff_zone_slice = []
 
-mult = 1. #for the slice of zone
+# mult = 1. #for the slice of zone
 mult2 = 1. #for the slice of the boundary particles
 
 slice_max = (mult2*r_eff[arb_ind]+z[arb_ind])
@@ -850,36 +938,54 @@ tree = cKDTree(halos)
 pix_val = zip(x_pix.ravel(),y_pix.ravel())
 pix_tree = cKDTree(pix_val)
 
+# Create kappa tree
+# kval = np.array(kappa_dict.values()).ravel()
+# kappa_tree = cKDTree(kval)
+# raise()
 #############################################################################
 
 ### FIND RADIUS AT WHICH THE BACKGROUND NUMBER DENSITY IS REACHED PER VOID ######################
 
-zone_rad_sph_den = np.zeros(len(x_vol_cut))
-numden_zone_rad = np.zeros(len(x_vol_cut))
+zone_rad_sph_den = -99.*np.ones(len(x_vol_cut))
+numden_zone_rad = -99.*np.ones(len(x_vol_cut))
 
 # Create a dictionary of distances from zone center to each particle 
-# dist = {}
-# dist = [tree.query([x_vol_cut[i],y_vol_cut[i],z_vol_cut[i]], k=int(numpart_vol))[0] for i in xrange(len(x_vol_cut))]
+dist1 = {}
+dist1 = [tree.query([x_vol_cut[i],y_vol_cut[i],z_vol_cut[i]], k=int(numpart_vol))[0] for i in xrange(len(x_vol_cut))]
 
-# for i in xrange(len(x_vol_cut)):
-# 	print i
-# 	for d in dist[i]:
-# 		# Find how many particles are within radius d for each zone
-# 		part_loc = tree.query_ball_point([x_vol_cut[i], y_vol_cut[i], z_vol_cut[i]], d)
+for i in xrange(len(x_vol_cut)):
+	print i
+	for d in dist1[i]:
+		# Find how many particles are within radius d for each zone
+		part_loc = tree.query_ball_point([x_vol_cut[i], y_vol_cut[i], z_vol_cut[i]], d)
 
-# 		# Get number den at this particular radius
-# 		numden = len(part_loc)/(((4.*pi)/3.)*d**3.)
+		# Get number den at this particular radius
+		# numden = len(part_loc)/(((4.*pi)/3.)*d**3.)
+		numden = len(part_loc)/np.sum(array(vol)[part_loc])
 
-# 		# If the numden is greater than or equal to the total numden, add radius to radius array
-# 		if numden >= 0.5*tot_numden:
-# 			numden_zone_rad[i] = numden
-# 			zone_rad_sph_den[i] = d
-# 			break
-# zero_idx = np.where(zone_rad_sph_den==0.)[0]
-# zone_rad_sph_den[zero_idx] = np.array(zone_rad)[zero_idx]
+		# If the numden is greater than or equal to the total numden, add radius to radius array
+		if numden >= 0.7*tot_numden:
+			numden_zone_rad[i] = numden
+			zone_rad_sph_den[i] = d
+			break
 
-# np.save('zone_rad_sph_0.5den_upto_z_525_cut', (zone_rad_sph_den,numden_zone_rad))
-zone_rad_sph_den, numden_zone_rad = np.load('zone_rad_sph_0.2den_upto_z_525_cut.npy')
+	# part_loc = [tree.query_ball_point([x_vol_cut[i], y_vol_cut[i], z_vol_cut[i]], d) for d in dist1[i]]
+	# numden = [len(part_loc[j])/(((4.*pi)/3.)*array(dist1[i])**3.) for j in xrange(len(part_loc))]
+	# den_idx = [np.where(array(numden[h])>=0.7*tot_numden)[0] for h in xrange(len(numden))]
+
+	# for k in xrange(len(numden)):
+	# 	if len(den_idx[k]) > 0:
+	# 		numden_zone_rad[i] = array(numden[k])[den_idx[k][0]]
+	# 		zone_rad_sph_den[i] = dist1[i][den_idx[k][0]]
+	# 	else:
+	# 		numden_zone_rad[i] = -99.
+	# 		zone_rad_sph_den[i] = -99.
+
+zero_idx = np.where(zone_rad_sph_den==-99.)[0]
+zone_rad_sph_den[zero_idx] = np.array(zone_rad)[zero_idx]
+
+np.save('zone_rad_sph_0.7den_upto_z_525_cut', (zone_rad_sph_den,numden_zone_rad))
+# zone_rad_sph_den, numden_zone_rad = np.load('zone_rad_sph_0.2den_upto_z_525_cut.npy')
 
 
 ###################################################################################################
@@ -896,6 +1002,7 @@ deg_to_pix = 0.00129115558
 # pixel scale by dividing the num of pixels (7745) by each distance across sky
 # pix_factor = [pix_count/(2*valz*tan(radians(5.))) for valz in z_vol]
 pix_factor = [pix_count/(2*valz*tan(radians(5.))) for valz in z_vol_cut]
+# pix_factor_denmin = [pix_count/(2*valz*tan(radians(5.))) for valz in z_denmin_cut]
 
 # Volume centers of void to pixel values
 # x_pix_vol = [(arctan(valx/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi) for (valx,valz) in zip(x_vol,z_vol)]
@@ -904,6 +1011,14 @@ x_pix_vol = [(valx*factor)+pix_count/2. for valx,factor in zip(x_vol,pix_factor)
 y_pix_vol = [(valy*factor)+pix_count/2. for valy,factor in zip(y_vol,pix_factor)]
 x_pix_vol_cut = [(valx*factor)+pix_count/2. for valx,factor in zip(x_vol_cut,pix_factor)]
 y_pix_vol_cut = [(valy*factor)+pix_count/2. for valy,factor in zip(y_vol_cut,pix_factor)]
+xpix_rand = random.uniform(0,pix_count,len(x_vol_cut))
+ypix_rand = random.uniform(0,pix_count,len(x_vol_cut))
+xpix_rand2 = random.uniform(0,pix_count,len(x_vol_cut))
+ypix_rand2 = random.uniform(0,pix_count,len(x_vol_cut))
+xpix_rand3 = random.uniform(0,pix_count,len(x_vol_cut))
+ypix_rand3 = random.uniform(0,pix_count,len(x_vol_cut))
+xpix_rand4 = random.uniform(0,pix_count,len(x_vol_cut))
+ypix_rand4 = random.uniform(0,pix_count,len(x_vol_cut))
 
 # x_pix_vol = [(LC.theta/2.+degrees(arctan((valx-(DA_upper/2.))/D_box))/deg_to_pix) + 7745/2. for valx in x_vol]
 # y_pix_vol = [(LC.theta/2.+degrees(arctan((valy-(DA_upper/2.))/D_box))/deg_to_pix) + 7745/2. for valy in y_vol]
@@ -911,8 +1026,8 @@ y_pix_vol_cut = [(valy*factor)+pix_count/2. for valy,factor in zip(y_vol_cut,pix
 # y_pix_vol = [valp*valy for valp,valy in zip(pix_factor,y_vol)]
 
 # Denmin centers of void to pixel values
-# x_pix_denmin = [(arctan(valx/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi) for (valx,valz) in zip(x_denmin,z_denmin)]
-# y_pix_denmin = [(arctan(valy/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi) for (valy,valz) in zip(y_denmin,z_denmin)]
+# x_pix_denmin_cut = [(valx*factor)+pix_count/2. for valx,factor in zip(x_denmin_cut,pix_factor_denmin)]
+# y_pix_denmin_cut = [(valy*factor)+pix_count/2. for valy,factor in zip(y_denmin_cut,pix_factor_denmin)]
 # x_pix_denmin = [(LC.theta/2.+degrees(arctan((valx-(DA_upper/2.))/D_upper))/deg_to_pix) + 7745/2. for valx in x_denmin]
 # y_pix_denmin = [(LC.theta/2.+degrees(arctan((valy-(DA_upper/2.))/D_upper))/deg_to_pix) + 7745/2. for valy in y_denmin]
 # x_pix_denmin = [valp*valx for valp,valx in zip(pix_factor,x_denmin)]
@@ -922,8 +1037,35 @@ y_pix_vol_cut = [(valy*factor)+pix_count/2. for valy,factor in zip(y_vol_cut,pix
 
 # zone_rad_pix = [((arctan((valx+rad)/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi)) - ((arctan(valx/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi)) for (rad,valx,valz) in zip(zone_rad,x_vol,z_vol)]
 # zone_rad_pixy = [((arctan((valy+rad)/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi)) - ((arctan(valy/valz) + 5.*(pi/180.))*(pix_count/10.)*(180./pi)) for (rad,valy,valz) in zip(zone_rad,y_vol,z_vol)]
-zone_rad_pix = [rad*factor for rad,factor in zip(zone_rad_sph_den,pix_factor)]
+# zone_rad_pix = [rad*factor for rad,factor in zip(zone_rad_sph_den,pix_factor)]
 zone_rad_pix_cut = [rad*factor for rad,factor in zip(zone_rad_cut,pix_factor)]
+zone_rad_rand_pix = [20*factor for factor in pix_factor]
+# zone_rad_cut = 20.*np.ones(len(z_vol_cut))
+
+
+### GET XY OF TOP N LARGEST VOIDS IN GIVEN REDSHIFT RANGE ###################################
+
+# Index of voids in z = 0.317 bin
+idx_317 = [j for j in xrange(len(zone_rad_cut)) if z_vol_cut[j]>=D_low_317 and z_vol_cut[j]<=D_upper_317]
+pix_factor_317 = [pix_count/(2*valz*tan(radians(5.))) for valz in array(z_vol_cut)[idx_317]]
+
+# XY coordinates for voids in z = 0.317 bin
+x_vol_317 = array(x_vol_cut)[idx_317]
+y_vol_317 = array(y_vol_cut)[idx_317]
+
+# Most massive radii location for voids in z = 0.317
+zone_lg_317 = np.argpartition(array(zone_rad_cut)[idx_317], -50)[-50:]
+
+# XY locations of most massive radii voids in z = 0.317
+x_vol_lg_317 = x_vol_317[zone_lg_317]
+y_vol_lg_317 = y_vol_317[zone_lg_317]
+
+x_vol_lg_pix_317 = [(valx*factor)+pix_count/2. for valx,factor in zip(x_vol_lg_317,pix_factor_317)]
+y_vol_lg_pix_317 = [(valy*factor)+pix_count/2. for valy,factor in zip(y_vol_lg_317,pix_factor_317)]
+
+
+
+#############################################################################
 
 ### CREATE SPHERICAL DENSITY PROFILE FOR A SINGLE ZONE ###############################
 
@@ -969,11 +1111,14 @@ for i in range(0,len(R_shell)):
 ##########################################################################################################################################
 
 # Split zones into bins from 0 to maximum radius of each zone
-# zone_bins = np.linspace(0,max(zone_rad_cut),2)
-zone_bins = np.linspace(0,max(zone_rad_sph_den),2)
+# zone_bins = np.linspace(0,20,2)
+zone_bins = np.linspace(0,max(zone_rad_cut),2)
+# zone_bins = np.linspace(0,max(zone_rad_sph_den),2)
 
 # Range of spherical shells is from 0 to 2*R_eff of each zone in bin
-R_stk = np.linspace(0,3,15)
+R_mult = 4
+num_shell = 20
+R_stk = np.linspace(0.01,R_mult,num_shell)
 
 # Create dictionary to store values for each output from the binning procedure
 x_den_stk = {}
@@ -989,47 +1134,196 @@ zone_rad_pix_stk = {}
 zone_dencon_stk = {}
 zn_stk = {}
 num_zn_stk = {}
-avg_kappa_err = {}
+avg_kappa_err_weight = {}
+avg_kappa_err_nonNaN = {}
 avg_delta_err = {}
 delta_per_void = {}
 kappa_per_void = {}
+w = {}
+weight = {}
+k_err1_weight = {}
+k_err1_nonNaN = {}
 
 
+
+# For random locations
+avg_kappa_sph2 = {}
+kappa_per_void2 = {}
+avg_kappa_err2 = {}
+avg_kappa_sph3 = {}
+kappa_per_void3 = {}
+avg_kappa_err3 = {}
+avg_kappa_sph4 = {}
+kappa_per_void4 = {}
+avg_kappa_err4 = {}
+k_err12 = {}
+k_err13 = {}
+k_err14 = {}
 
 for i in range(0,len(zone_bins)-1):
 	# Loops over all the bins and puts xyz (den and vol), zone radii, zone dencon, num of zones in bin, and zone ID into dictionary
 	# Note that values of the dictionary are referred to as the upper value of the bin
 	# eg there will be no '0' entry, but will be a 'max(zone_radius)' entry
-	x_den_stk[i],y_den_stk[i],z_den_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],zone_rad_stk[i],zone_dencon_stk[i],zn_stk[i],zone_rad_pix_stk[i] = bin_zone(x_denmin_cut,y_denmin_cut,z_denmin_cut, x_vol_cut,y_vol_cut,z_vol_cut, x_pix_vol_cut, y_pix_vol_cut, zone_rad_sph_den, dencon, zone_rad_pix, zone_bins[i], zone_bins[i+1])
+	x_den_stk[i],y_den_stk[i],z_den_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],zone_rad_stk[i],zone_dencon_stk[i],zn_stk[i],zone_rad_pix_stk[i] = bin_zone(x_denmin_cut,y_denmin_cut,z_denmin_cut, x_vol_cut,y_vol_cut,z_vol_cut, x_pix_vol_cut, y_pix_vol_cut, zone_rad_cut, dencon, zone_rad_pix_cut, zone_bins[i], zone_bins[i+1])
 	num_zn_stk[i] = len(zone_rad_stk[i])
 
 
 # Create dictionaries for average counts, num den, and R_stk for each bins
 avg_count_sph = {}
 avg_den_sph = {}
-avg_kappa_sph = {}
+avg_kappa_sph_weight = {}
+avg_kappa_sph_nonNaN = {}
 
+num_not_nan = np.zeros(len(R_stk))
+num_not_nan2 = np.zeros(len(R_stk))
+num_not_nan3 = np.zeros(len(R_stk))
+num_not_nan4 = np.zeros(len(R_stk))
+
+new_weight = np.zeros(len(R_stk))
 # Get avg counts and nden for each shell in each bin
 for i in range(0,len(zone_bins)-1):
 	if zone_rad_stk[i] != []:
 		
-		avg_count_sph[i], avg_den_sph[i], delta_per_void[i] = spherical_stk(zone_rad_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],num_zn_stk[i])
-		# avg_kappa_sph[i], kappa_per_void[i] = sph_kappa_stk(zone_rad_pix_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
+		
+		# avg_count_sph[i], avg_den_sph[i], delta_per_void[i] = spherical_stk(zone_rad_stk[i],x_vol_stk[i],y_vol_stk[i],z_vol_stk[i],num_zn_stk[i])
 		
 		kappa_per_void[i] = sph_kappa_stk(zone_rad_pix_stk[i],x_pix_vol_stk[i],y_pix_vol_stk[i],num_zn_stk[i])
-		avg_kappa_sph[i] = [nanmean([(array(kappa_per_void[i])[k,j]) for k in xrange(len(kappa_per_void[i]))]) for j in xrange(len(R_stk))]
+		# avg_kappa_sph[i] = [nanmean([(array(kappa_per_void[i])[k,j]) for k in xrange(len(kappa_per_void[i]))]) for j in xrange(len(R_stk))]
+		
+		for g in xrange(len(kappa_per_void[i])):
+			for j,t in enumerate(kappa_per_void[i][g]):
+				if np.isfinite(t):
+					num_not_nan[j] += 1.
+				
+		# for h in xrange(len(w[i])):
+		# 	for j,t in enumerate(w[i][h]):
+		# 		new_weight[j] = new_weight[j]+t
+
+		# print 'num_not_nan', num_not_nan
+		# print 'new_weight', new_weight
+
+		# # Create weights for each zone
+		# weight[i] = (array(zone_rad_pix_stk[i])**2)/max(zone_rad_pix_stk[i])**2
+		# wsum = sum(weight[i])
+		
+		# # Weighted normalistation
+		# avg_kappa_sph_weight[i] = [nansum([weight[i][k]*array(kappa_per_void[i][k][j]) for k in xrange(len(kappa_per_void[i]))])/wsum for j in xrange(len(R_stk))]
+		
+		# Num_not_NaN normalisation
+		avg_kappa_sph_nonNaN[i] = [nansum([array(kappa_per_void[i][k][j]) for k in xrange(len(kappa_per_void[i]))])/num_not_nan[j] for j in xrange(len(R_stk))]
+
+
+		# COVARIANCE AND X^2
+		cov_kappa, cov_norm_kappa = covariance(kappa_per_void[i],kappa_per_void[i])
+
+		chi_sq_kappa = chi_sq(cov_kappa,avg_kappa_sph_nonNaN[i])
+
+
+		# # FOR RANDOM LOCATIONS
+		# kappa_per_void2[i] = sph_kappa_stk(zone_rad_pix_stk[i],xpix_rand2,ypix_rand2,num_zn_stk[i])
+		
+		# for g in xrange(len(kappa_per_void2[i])):
+		# 	for j,t in enumerate(kappa_per_void2[i][g]):
+		# 		if np.isfinite(t):
+		# 			num_not_nan2[j] += 1.
+
+		# # Weighted normalistation			
+		# # avg_kappa_sph2[i] = [nansum([weight[i][k]*array(kappa_per_void2[i][k][j]) for k in xrange(len(kappa_per_void2[i]))])/wsum for j in xrange(len(R_stk))]
+		
+		# # Num_not_NaN normalisation
+		# avg_kappa_sph2[i] = [nansum([array(kappa_per_void2[i][k][j]) for k in xrange(len(kappa_per_void2[i]))])/num_not_nan2[j] for j in xrange(len(R_stk))]
+
+
+		# kappa_per_void3[i] = sph_kappa_stk(zone_rad_pix_stk[i],xpix_rand3,ypix_rand3,num_zn_stk[i])
+		
+		# for g in xrange(len(kappa_per_void3[i])):
+		# 	for j,t in enumerate(kappa_per_void3[i][g]):
+		# 		if np.isfinite(t):
+		# 			num_not_nan3[j] += 1.
+		
+		# # Weighted normalistation
+		# # avg_kappa_sph3[i] = [nansum([weight[i][k]*array(kappa_per_void3[i][k][j]) for k in xrange(len(kappa_per_void3[i]))])/wsum for j in xrange(len(R_stk))]
+		
+		# # Num_not_NaN normalisation
+		# avg_kappa_sph3[i] = [nansum([array(kappa_per_void3[i][k][j]) for k in xrange(len(kappa_per_void3[i]))])/num_not_nan3[j] for j in xrange(len(R_stk))]
+
+
+		# kappa_per_void4[i] = sph_kappa_stk(zone_rad_pix_stk[i],xpix_rand4,ypix_rand4,num_zn_stk[i])
+		
+		# for g in xrange(len(kappa_per_void4[i])):
+		# 	for j,t in enumerate(kappa_per_void4[i][g]):
+		# 		if np.isfinite(t):
+		# 			num_not_nan4[j] += 1.
+		
+		# # Weighted normalistation			
+		# # avg_kappa_sph4[i] = [nanmean([(array(kappa_per_void4[i])[k,j]) for k in xrange(len(kappa_per_void4[i]))]) for j in xrange(len(R_stk))]
+		
+		# # Num_not_NaN normalisation
+		# avg_kappa_sph4[i] = [nansum([array(kappa_per_void4[i][k][j]) for k in xrange(len(kappa_per_void4[i]))])/num_not_nan4[j] for j in xrange(len(R_stk))]
 
 		
-		# Error on mean of kappa and delta calculaion
-		avg_kappa_err[i] = [sqrt(nanmean([abs(array(kappa_per_void[i])[k,j]-avg_kappa_sph[i][j])**2 for k in xrange(len(kappa_per_void[i]))]))/sqrt(len(kappa_per_void[i])) for j in xrange(len(R_stk))]
-		avg_delta_err[i] = [sqrt(mean([abs(array(delta_per_void[i])[k,j]-avg_den_sph[i][j])**2 for k in xrange(len(delta_per_void[i]))]))/sqrt(len(delta_per_void[i])) for j in xrange(len(R_stk))]
+		# ERROR ON MEAN OF KAPPA AND DELTA 
+		# for h,t in enumerate(weight[i]):
+		# 	avg_kappa_err[i] = [sqrt(nansum(t*array(kappa_per_void[i][h])[j]**2)/sum(weight[i]) - (nansum(t*array(kappa_per_void[i][h])[j])/sum(weight[i]))**2) for j in xrange(len(R_stk))]
+		# avg_kappa_err[i] = [sqrt([nansum(weight[i][k]*(array(kappa_per_void[i][k])[j])**2)/wsum - (nansum([weight[i][k]*array(kappa_per_void[i][k])[j]))**2)/wsum for k in xrange(len(kappa_per_void[i])-1)]) for j in xrange(len(R_stk))]
+		
+		# # Weighted normalistation
+		# k_err1_weight[i] = array([nansum([weight[i][k]*array(kappa_per_void[i][k][j])**2 for k in xrange(len(kappa_per_void[i]))])/wsum for j in xrange(len(R_stk))])
+		# avg_kappa_err_weight[i] = sqrt(k_err1_weight[i]-array(avg_kappa_sph_weight[i])**2)/wsum
+
+		# Num_not_NaN normalisation		
+		k_err1_nonNaN[i] = array([nansum([array(kappa_per_void[i][k][j])**2 for k in xrange(len(kappa_per_void[i]))])/(num_not_nan[j])  for j in xrange(len(R_stk))])
+		avg_kappa_err_nonNaN[i] = sqrt(k_err1_nonNaN[i]-array(avg_kappa_sph_nonNaN[i])**2)/sqrt(array(num_not_nan))
+
+		# avg_delta_err[i] = [sqrt(mean([abs(array(delta_per_void[i])[k,j]-avg_den_sph[i][j])**2 for k in xrange(len(delta_per_void[i]))]))/sqrt(len(delta_per_void[i])) for j in xrange(len(R_stk))]
+
+		# Weighted normalistation
+		# k_err12[i] = array([nansum([weight[i][k]*array(kappa_per_void2[i][k][j])**2 for k in xrange(len(kappa_per_void2[i]))])/wsum for j in xrange(len(R_stk))])
+		# avg_kappa_err2[i] = sqrt(k_err12[i]-array(avg_kappa_sph2[i])**2)/wsum
+
+		# # Num_not_NaN normalisation
+		# k_err12[i] = array([nansum([array(kappa_per_void2[i][k][j])**2 for k in xrange(len(kappa_per_void2[i]))])/num_not_nan2[j]  for j in xrange(len(R_stk))])
+		# avg_kappa_err2[i] = sqrt(k_err12[i]-array(avg_kappa_sph2[i])**2)/sqrt(array(num_not_nan2))
+
+		# Weighted normalistation
+		# k_err13[i] = array([nansum([weight[i][k]*array(kappa_per_void3[i][k][j])**2 for k in xrange(len(kappa_per_void3[i]))])/wsum for j in xrange(len(R_stk))])
+		# avg_kappa_err3[i] = sqrt(k_err13[i]-array(avg_kappa_sph3[i])**2)/wsum
+
+		# # Num_not_NaN normalisation
+		# k_err13[i] = array([nansum([array(kappa_per_void3[i][k][j])**2 for k in xrange(len(kappa_per_void3[i]))])/num_not_nan3[j]  for j in xrange(len(R_stk))])
+		# avg_kappa_err3[i] = sqrt(k_err13[i]-array(avg_kappa_sph3[i])**2)/sqrt(array(num_not_nan3))
+
+		# Weighted normalistation
+		# k_err14[i] = array([nansum([weight[i][k]*array(kappa_per_void4[i][k][j])**2 for k in xrange(len(kappa_per_void4[i]))])/wsum for j in xrange(len(R_stk))])
+		# avg_kappa_err4[i] = sqrt(k_err14[i]-array(avg_kappa_sph4[i])**2)/wsum
+
+		# # Num_not_NaN normalisation
+		# k_err14[i] = array([nansum([array(kappa_per_void4[i][k][j])**2 for k in xrange(len(kappa_per_void4[i]))])/num_not_nan4[j]  for j in xrange(len(R_stk))])
+		# avg_kappa_err4[i] = sqrt(k_err14[i]-array(avg_kappa_sph4[i])**2)/sqrt(array(num_not_nan4))
+		
+		# avg_kappa_err3[i] = [sqrt(nanmean([abs(array(kappa_per_void3[i])[k,j]-avg_kappa_sph3[i][j])**2 for k in xrange(len(kappa_per_void3[i]))]))/sqrt(len(kappa_per_void3[i])) for j in xrange(len(R_stk))]
+		# avg_kappa_err4[i] = [sqrt(nanmean([abs(array(kappa_per_void4[i])[k,j]-avg_kappa_sph4[i][j])**2 for k in xrange(len(kappa_per_void4[i]))]))/sqrt(len(kappa_per_void4[i])) for j in xrange(len(R_stk))]
+		# avg_delta_err[i] = [sqrt(mean([abs(array(delta_per_void[i])[k,j]-avg_den_sph[i][j])**2 for k in xrange(len(delta_per_void[i]))]))/sqrt(len(delta_per_void[i])) for j in xrange(len(R_stk))]
 		
 # avg_kappa_sph_all, avg_kappa_err_all = sph_kappa_stk(zone_rad_pix_cut,x_pix_vol_cut,y_pix_vol_cut,len(zone_rad_pix_cut))
 
 		# np.save('sph_kappa_Mocks_%d' % zone_bins[i+1], (avg_kappa_sph[i], avg_kappa_err[i]))
 
-# Kappa profile for halos
-# avg_kappa_sph_halo, avg_kappa_err_halo = sph_kappa_stk(rad_halo_massive,x_halo_massive,y_halo_massive,len(x_halo_massive))
+# KAPPA PROFILE FOR HALOS
+# num_not_nan_halo = np.zeros(len(R_stk))
+
+# kappa_per_halo = sph_kappa_stk(rad_halo_massive,x_halo_massive,y_halo_massive,len(x_halo_massive))
+
+# for g in xrange(len(kappa_per_halo)):
+# 	for j,t in enumerate(kappa_per_halo[g]):
+# 		if np.isfinite(t):
+# 			num_not_nan_halo[j] += 1.
+
+
+# avg_kappa_sph_halo = [nansum([array(kappa_per_halo[k][j]) for k in xrange(len(kappa_per_halo))])/num_not_nan_halo[j] for j in xrange(len(R_stk))]
+
+# k_err1_halo = array([nansum([array(kappa_per_halo[k][j])**2 for k in xrange(len(kappa_per_halo))])/(num_not_nan_halo[j])  for j in xrange(len(R_stk))])
+# avg_kappa_err_halo = sqrt(k_err1_halo-array(avg_kappa_sph_halo)**2)/sqrt(array(num_not_nan_halo))
 
 
 # Load spherical avg counts and avg nden
@@ -1049,7 +1343,7 @@ for i in range(0,len(zone_bins)-1):
 
 # Bins and bin mids to be used for each zone.  These will be normalized to the effective zone radius
 # bins = np.linspace(0,3.0,20)
-bins = np.arange(0,100.,5)
+bins = np.arange(0,2*max(zone_rad_cut),5)
 
 
 bins_mid_zn = []
@@ -1074,22 +1368,30 @@ zn_cnt = 0
 # Create dict of all the bins to access for plotting
 den_bins_all_dict = {}
 
+zncnt = 0
 # for i in range(0,len(zone_bins)-1):
 # 	print 'num of zones in %d' % i, len(zn_stk[i])
 # 	t_begin2 = time.time()
+# 	print zncnt
 # 	for zn in zn_stk[i]:
 
 # 		# Loop over all zones and get index for each particle in that zone
 # 		# zn = zn_stk[8][0]
-# 		same_zone_id_bn = np.where(zone_nonzero == zn)
+# 		same_zone_id_bn = np.where(zone_nonzero == zn)[0]
 
 # 		tot_zone_vol_bn = 0
 # 		vol_same_zone_bn = []
+# 		slice_max_bn = []
+# 		slice_min_bn = []
+
+# 		mult = 1.5
 
 # 		for n in same_zone_id_bn:
 # 			tot_zone_vol_bn += vol[n]
 # 			vol_same_zone_bn.append(vol[n])
-
+# 			slice_max_bn.append((mult*r_eff[n]+z[n]))
+# 			slice_min_bn.append((z[n]-mult*r_eff[n]))
+		
 # 		r_eff_zone_tot_bn = (tot_zone_vol*(3./(4*pi)))**(1./3.)
 
 # 		x_same_zone_bn = []
@@ -1098,19 +1400,20 @@ den_bins_all_dict = {}
 # 		r_eff_same_zone_bn = []
 # 		same_zone_adj_bn = []
 
-# 		for valx in same_zone_id_bn[0]:
+
+# 		for valx in same_zone_id_bn:
 # 			x_same_zone_bn.append(x[valx])
 
-# 		for valy in same_zone_id_bn[0]:
+# 		for valy in same_zone_id_bn:
 # 			y_same_zone_bn.append(y[valy])
 
-# 		for valz in same_zone_id_bn[0]:
+# 		for valz in same_zone_id_bn:
 # 			z_same_zone_bn.append(z[valz])
 
-# 		for valrad in same_zone_id_bn[0]:
+# 		for valrad in same_zone_id_bn:
 # 			r_eff_same_zone_bn.append(r_eff[valrad])
 
-# 		for valadj in same_zone_id_bn[0]:
+# 		for valadj in same_zone_id_bn:
 # 			# Gets array of indices of adjacent particles to each particle in a specific zone
 # 			same_zone_adj_bn.append(adj_dict[valadj])
 
@@ -1120,12 +1423,12 @@ den_bins_all_dict = {}
 # 		cell_on_boundary_tot, cell_on_boundary, x_non_zone_adj_arr_tot, y_non_zone_adj_arr_tot, z_non_zone_adj_arr_tot, adj_cell_vol_tot = adj_particles(same_zone_adj_bn,zn)
 
 # 		# Volume weighted average of boundary
-# 		x_vol_avg, y_vol_avg, z_vol_avg = vol_avg_center(x[cell_on_boundary_tot],y[cell_on_boundary_tot],z[cell_on_boundary_tot], x_non_zone_adj_arr_tot,y_non_zone_adj_arr_tot,z_non_zone_adj_arr_tot, vol[cell_on_boundary_tot],adj_cell_vol_tot)
+# 		x_vol_avg, y_vol_avg, z_vol_avg = vol_avg_center(array(x)[cell_on_boundary_tot],array(y)[cell_on_boundary_tot],array(z)[cell_on_boundary_tot], x_non_zone_adj_arr_tot,y_non_zone_adj_arr_tot,z_non_zone_adj_arr_tot, array(vol)[cell_on_boundary_tot],adj_cell_vol_tot)
 # 		# x_vol_avg_plot, y_vol_avg_plot, z_vol_avg_plot = vol_avg_center(x[cell_on_boundary],y[cell_on_boundary],z[cell_on_boundary], x_non_zone_adj_arr_slice,y_non_zone_adj_arr_slice,z_non_zone_adj_arr_slice, vol[cell_on_boundary],adj_cell_vol)
 
 
 # 		### CREATE BOUNDARY DISTANCE PROFILE FOR A SINGLE ZONE AND APPEND TO STACKED VALUE ###############################
-# 		den_bins, dist_bins, ncnt_bins, den_bins_non_zn, dist_bins_non_zn, ncnt_bins_non_zn = boundary_stk(x_vol_avg,y_vol_avg,z_vol_avg, x_same_zone_bn,y_same_zone_bn,z_same_zone_bn, vol_same_zone_bn, zn, 150)
+# 		den_bins, dist_bins, ncnt_bins, den_bins_non_zn, dist_bins_non_zn, ncnt_bins_non_zn = boundary_stk(x_vol_avg,y_vol_avg,z_vol_avg, x_same_zone_bn,y_same_zone_bn,z_same_zone_bn, vol_same_zone_bn, int(zn), 2*max(zone_rad_cut))
 
 
 # 		# Add the values of density, distance, and num counts to each bin
@@ -1146,7 +1449,7 @@ den_bins_all_dict = {}
 # 			# dist_bins_tot[l] += dist_bins[l]
 # 			if ncnt_bins_tot_non_zn[l] != np.nan:
 # 				ncnt_bins_tot_non_zn[l] += ncnt_bins_non_zn[l]
-
+# 	zncnt += 1			
 # 	# Divide each value in the density, distance, and number counts by the number of zones
 # 	den_bins_tot = den_bins_tot/len(zn_stk[i])
 # 	dist_bins_tot = dist_bins_tot/len(zn_stk[i])
@@ -1211,13 +1514,16 @@ print 'time of code: \t%g minutes' % ((t_end-t_begin)/60.)
 
 # fig1 = plt.figure(figsize=(10,8))
 # fig2 = plt.figure(figsize=(10,8))
-fig3 = plt.figure(figsize=(10,8))
+# fig3 = plt.figure(figsize=(10,8))
 # fig4 = plt.figure(figsize=(10,8))
 # fig5 = plt.figure(figsize=(10,8))
 # fig6 = plt.figure(figsize=(10,8))
 # fig7 = plt.figure(figsize=(10,8))
 fig8 = plt.figure(figsize=(10,8))
 # fig9 = plt.figure(figsize=(10,8))
+# fig10 = plt.figure(figsize=(10,8))
+# fig11 = plt.figure(figsize=(10,8))
+# fig12 = plt.figure(figsize=(10,8))
 
 # Create ability to cycle through linestyles
 lines = ["-","--","-.",":"]
@@ -1273,26 +1579,26 @@ linecycler = cycle(lines)
 
 
 # Create density contrast vs R_v for stacked voids
-label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
-ax3 = fig3.add_subplot(111)
-#ax3.set_xlim(0,33)
-ax3.set_ylim(0,2)
-ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
-ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
-for i in range(0,len(zone_bins)-1):
-	if zone_rad_stk[i] != []:
-		clr = next(colorcycler)
-		ax3.plot(R_stk, np.array(avg_den_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
-		ax3.errorbar(R_stk, np.array(avg_den_sph[i]), yerr=np.array(avg_delta_err[i]), fmt='x', color = clr)
-ax3.spines['top'].set_linewidth(2.3)
-ax3.spines['left'].set_linewidth(2.3)
-ax3.spines['right'].set_linewidth(2.3)
-ax3.spines['bottom'].set_linewidth(2.3)
-for tick in ax3.xaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-for tick in ax3.yaxis.get_major_ticks():
-    tick.label.set_fontsize(27)
-ax3.legend(loc='best', fancybox = True, shadow = True, ncol=2)
+# label = [r'$\mathrm{R_{zone}}<=35$',r'$35<\mathrm{R_{zone}}<=50$',r'$\mathrm{R_{zone}}>50$']
+# ax3 = fig3.add_subplot(111)
+# #ax3.set_xlim(0,33)
+# ax3.set_ylim(0,2)
+# ax3.set_xlabel(r'$\mathrm{r/R_{zone}}$')
+# ax3.set_ylabel(r'$\mathrm{\delta(r)+1}$')
+# for i in range(0,len(zone_bins)-1):
+# 	if zone_rad_stk[i] != []:
+# 		clr = next(colorcycler)
+# 		ax3.plot(R_stk, np.array(avg_den_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
+# 		ax3.errorbar(R_stk, np.array(avg_den_sph[i]), yerr=np.array(avg_delta_err[i]), fmt='x', color = clr)
+# ax3.spines['top'].set_linewidth(2.3)
+# ax3.spines['left'].set_linewidth(2.3)
+# ax3.spines['right'].set_linewidth(2.3)
+# ax3.spines['bottom'].set_linewidth(2.3)
+# for tick in ax3.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax3.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# ax3.legend(loc='best', fancybox = True, shadow = True, ncol=2)
 # fig3.savefig('KiDS_Mocks_upto_z_525_spherical_prof_stk_bin', format='pdf')
 
 
@@ -1383,26 +1689,42 @@ ax3.legend(loc='best', fancybox = True, shadow = True, ncol=2)
 
 ax8 = fig8.add_subplot(111)
 # ax8.set_xlim(0,33)
-# ax8.set_ylim(0,3)
+ax8.set_ylim(-0.0003,0.0003)
 ax8.set_xlabel(r'$\mathrm{r/R_{zone}}$')
 ax8.set_ylabel(r'$\mathrm{\kappa}$')
 for i in range(0,len(zone_bins)-1):
 	if zone_rad_stk[i] != []:
+		# clr = next(colorcycler)
+		# ax8.plot(R_stk, np.array(avg_kappa_sph_weight[i]), linewidth=3, label='%2d Weighted Norm' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
+		# ax8.errorbar(R_stk, np.array(avg_kappa_sph_weight[i]), yerr=np.array(avg_kappa_err_weight[i]), fmt='x', color = clr)
 		clr = next(colorcycler)
-		ax8.plot(R_stk, np.array(avg_kappa_sph[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
-		ax8.errorbar(R_stk, np.array(avg_kappa_sph[i]), yerr=np.array(avg_kappa_err[i]), fmt='x', color = clr)
-# ax8.plot(R_stk, np.array(avg_kappa_sph_all), linewidth=3)
-# ax8.errorbar(R_stk, np.array(avg_kappa_sph_all), yerr=np.array(avg_kappa_err_all), fmt='x')
+		ax8.plot(R_stk, np.array(avg_kappa_sph_nonNaN[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
+		ax8.errorbar(R_stk, np.array(avg_kappa_sph_nonNaN[i]), yerr=np.array(avg_kappa_err_nonNaN[i]), fmt='x', color = clr)
+		
+		# Randoms
+		# clr = next(colorcycler)
+		# ax8.plot(R_stk, np.array(avg_kappa_sph2[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
+		# ax8.errorbar(R_stk, np.array(avg_kappa_sph2[i]), yerr=np.array(avg_kappa_err2[i]), fmt='x', color = clr)
+		# clr = next(colorcycler)
+		# ax8.plot(R_stk, np.array(avg_kappa_sph3[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
+		# ax8.errorbar(R_stk, np.array(avg_kappa_sph3[i]), yerr=np.array(avg_kappa_err3[i]), fmt='x', color = clr)
+		# clr = next(colorcycler)
+		# ax8.plot(R_stk, np.array(avg_kappa_sph4[i]), linewidth=3, label='%2d' % zone_bins[i+1], linestyle = next(linecycler), color = clr)
+		# ax8.errorbar(R_stk, np.array(avg_kappa_sph4[i]), yerr=np.array(avg_kappa_err4[i]), fmt='x', color = clr)
+# ax8.plot(R_stk, np.array(avg_kappa_sph_halo), linewidth=3)
+# ax8.errorbar(R_stk, np.array(avg_kappa_sph_halo), yerr=np.array(avg_kappa_err_halo), fmt='x')
 ax8.spines['top'].set_linewidth(2.3)
 ax8.spines['left'].set_linewidth(2.3)
 ax8.spines['right'].set_linewidth(2.3)
 ax8.spines['bottom'].set_linewidth(2.3)
+# ax8.set_xscale('log')
+# ax8.set_yscale('log')
 for tick in ax8.xaxis.get_major_ticks():
     tick.label.set_fontsize(27)
 for tick in ax8.yaxis.get_major_ticks():
     tick.label.set_fontsize(27)
-ax8.legend(loc='best', fancybox = True, shadow = True, ncol = 2)
-# fig8.savefig('KiDS_Mocks_upto_z_525_kappa_sph_LoRes', format='pdf')
+ax8.legend(loc='best', fancybox = True, shadow = True)#, ncol = 2)
+# fig8.savefig('KiDS_Mocks_upto_z_525_kappa_sph_random_allzones3', format='png')
 
 # Create kappa vs R_v for stacked halos
 # ax9 = fig9.add_subplot(111)
@@ -1426,5 +1748,64 @@ ax8.legend(loc='best', fancybox = True, shadow = True, ncol = 2)
 # ax9.legend(loc='best', fancybox = True, shadow = True, ncol=2)
 # fig9.savefig('KiDS_Mocks_upto_z_525_spherical_prof_stk_bin', format='pdf')
 
+# Create scatter plot of galaxies in LC within y slice and some zones
+# ax1 = fig10.add_subplot(111)
+# ax1.set_xlabel(r'$\mathrm{x}$')
+# ax1.set_ylabel(r'$\mathrm{z}$')
+# ax1.set_xlim(-150,150)
+# ax1.set_ylim(1000,1300)
+# ax1.scatter(xslice, zslice, color='red', marker='o')
+# for i in xrange(0,len(yslice_zone_loc)):
+# 	circ=plt.Circle((xslice_zone[i],zslice_zone[i]),yslice_zone_rad[i], color='b', alpha=0.5)
+# 	ax1.add_artist(circ)
+# 	ax1.scatter(xslice_zone[i],zslice_zone[i], color='black', marker='d', s=100)
+# ax1.add_artist(circ)
+# ax1.spines['top'].set_linewidth(2.3)
+# ax1.spines['left'].set_linewidth(2.3)
+# ax1.spines['right'].set_linewidth(2.3)
+# ax1.spines['bottom'].set_linewidth(2.3)
+# for tick in ax1.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax1.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)   
+# fig10.savefig('KiDS_Mocks_LC_yslice_zones', format='png')
+
+# Create 2D histogram of yslice with void locations.
+# ax1 = fig11.add_subplot(111)
+# ax1.set_xlabel(r'$\mathrm{x}$')
+# ax1.set_ylabel(r'$\mathrm{z}$')
+# hst = ax1.hist2d(xslice, zslice, bins=25, norm=mclr.LogNorm(), range = [[-150,150],[1000,1300]])
+# fig11.colorbar(hst,fraction=0.046, pad=0.04)
+# ax1.scatter(xslice_zone,zslice_zone, color='k', marker='d', s=100)
+# ax1.spines['top'].set_linewidth(2.3)
+# ax1.spines['left'].set_linewidth(2.3)
+# ax1.spines['right'].set_linewidth(2.3)
+# ax1.spines['bottom'].set_linewidth(2.3)
+# for tick in ax1.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax1.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)  
+# fig11.savefig('KiDS_Mocks_yslice_hist2D', format='png')
+
+# Create 2D histogram of yslice with void locations.
+# ax1 = fig12.add_subplot(111)
+# ax1.set_xlabel(r'$\mathrm{x_{pix}}$')
+# ax1.set_ylabel(r'$\mathrm{y_{pix}}$')
+# ax1.set_ylim(0,len(kappa))
+# ax1.set_xlim(0,len(kappa))
+# im = ax1.imshow(kappa, cmap='hot')
+# # divider = make_axes_locatable(ax1)
+# # cax = divider.append_axes("right", size="5%", pad=0.05)
+# fig12.colorbar(im,fraction=0.046, pad=0.04)
+# ax1.scatter(x_vol_lg_pix_317,y_vol_lg_pix_317, color='w', marker='x', s=100)
+# ax1.spines['top'].set_linewidth(2.3)
+# ax1.spines['left'].set_linewidth(2.3)
+# ax1.spines['right'].set_linewidth(2.3)
+# ax1.spines['bottom'].set_linewidth(2.3)
+# for tick in ax1.xaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)
+# for tick in ax1.yaxis.get_major_ticks():
+#     tick.label.set_fontsize(27)  
+# #fig12.savefig('KiDS_Mocks_kappa_voids_at_0_317', format='png')
 
 plt.show()
